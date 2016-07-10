@@ -9,7 +9,7 @@
     @author: Gabriel Dubé
 """
 
-import platform
+import platform, asyncio
 
 system_name = platform.system()
 if system_name == 'Windows':
@@ -18,3 +18,23 @@ elif system_name == 'Linux':
     from xlib import XlibWindow as Window
 else:
     raise OSError("Platform not supported")
+
+class Application(object):
+
+    def __init__(self):
+        
+        self.window = Window()
+
+def main():
+    # I never execute my code in the global scope of the project to make sure
+    # that every ressources will be deallocated before the EOF is reached.
+    # In this case "app" (and all the ressources associated) will be freed once
+    # main return.
+    app = Application()
+
+    loop = asyncio.get_event_loop()
+    loop.run_forever()
+
+
+if __name__ == '__main__':
+    main()
