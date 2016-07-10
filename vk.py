@@ -1,5 +1,6 @@
 """
-    Thin wrapper over the vulkan API using ctypes
+    Thin wrapper over the vulkan API using ctypes.
+    This wrapper is incomplete and should'nt be used outside this demo
 """
 
 from ctypes import *
@@ -839,6 +840,20 @@ del mod
 vk = cdll.LoadLibrary('vulkan-1')
 GetInstanceProcAddr = vk.vkGetInstanceProcAddr
 GetInstanceProcAddr.restype = c_void_p  # Note: using a function to check the return value will corrupt the function pointer.
-GetInstanceProcAddr.argtypes = (c_void_p, c_char_p)
+GetInstanceProcAddr.argtypes = (Instance, c_char_p)
 
-CreateInstance = (CFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(NULL, b'vkCreateInstance'))
+CreateInstance = (CFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(Instance(0), b'vkCreateInstance'))
+
+INSTANCE_FUNCTIONS = (
+    (b'vkDestroyInstance', None, Instance, c_void_p),
+)
+
+def load_instance_functions(owner, instance):
+    """
+        Not generated! Load the vulkan instance functions and add them to owner
+    """
+    for name, return_type, *args in INSTANCE_FUNCTIONS:
+        py_name = name.decode()[2::]
+        fn = (CFUNCTYPE(return_type, *args))(GetInstanceProcAddr(instance, name))
+        setattr(owner, py_name, fn)
+

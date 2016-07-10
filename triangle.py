@@ -50,7 +50,7 @@ class Application(object):
         instance = vk.Instance(0)
         result = vk.CreateInstance(byref(create_info), vk.NULL, byref(instance))
         if result == vk.SUCCESS:
-            print(instance)
+            vk.load_instance_functions(self, instance)
             return instance
         else:
             raise RuntimeError('Instance creation failed. Error code: {}'.format(result))
@@ -58,6 +58,14 @@ class Application(object):
     def __init__(self):
         self.window = Window()
         self.instance = self.create_instance()
+
+
+    def __del__(self):
+        if not hasattr(self, 'instance'):
+            # If initialization failed, there is nothing to free
+            return
+        self.DestroyInstance(self.instance, vk.NULL)
+        print("Application freed!")
 
 def main():
     # I never execute my code in the global scope of the project to make sure
