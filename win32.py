@@ -1,6 +1,7 @@
 """
     Minimalistic wrapper over the Windows window api
 """
+from vk import SurfaceKHR, SUCCESS
 
 from ctypes import *
 from ctypes.wintypes import *
@@ -189,5 +190,38 @@ class Win32Window(object):
 
         UnregisterClassW(self.__class_name, GetModuleHandleW(None))
 
+    @property
+    def handle(self):
+        return self.__hwnd
+
     def show(self):
         ShowWindow(self.__hwnd, SW_SHOWNORMAL)
+
+
+class WinSwapchain(object):
+
+    def create_surface(self):
+        surface = SurfaceKHR(0)
+        surface_info = vk.Win32SurfaceCreateInfoKHR(
+            s_type = vk.STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+            next= vk.NULL, flags=0, hinstance=get_instance(),
+            hwnd=GetModuleHandleW(None)
+        )
+
+        result = app.CreateWin32SurfaceKHR(app.instance, byref(surface_info),NULL, byref(surface))
+        if result == SUCCESS:
+            self.surface = surface
+        else:
+            raise RuntimeError("Failed to create surface")
+
+    def __init__(self, app):
+        # Circular dependency is ok because its a demo. Otherwise I would have used weakref
+        self.app = app 
+        self.surface = None
+
+    def destroy(self):
+        app = self.app
+        app.DestroySurfaceKHR(app.instance, self.surface, NULL)
+        
+
+        

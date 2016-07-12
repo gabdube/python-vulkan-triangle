@@ -14,18 +14,11 @@ from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float
 
 system_name = platform.system()
 if system_name == 'Windows':
-    from win32 import Win32Window as Window
+    from win32 import Win32Window as Window, WinSwapchain as Swapchain
 elif system_name == 'Linux':
-    from xlib import XlibWindow as Window
+    from xlib import XlibWindow as Window, XlibSwapchain as Swapchain
 else:
     raise OSError("Platform not supported")
-
-class Swapchain(object):
-
-    def __init__(self, app):
-        pass
-
-
 
 class Application(object):
 
@@ -141,6 +134,7 @@ class Application(object):
     def __init__(self):
         self.instance = None
         self.device = None
+        self.swapchain = None
         self.window = Window()
 
         self.create_instance()
@@ -152,6 +146,9 @@ class Application(object):
     def __del__(self):
         if self.instance is None:
             return # If initialization failed, there is nothing to free
+
+        if self.swapchain is not None:
+            self.swapchain.destroy()
 
         if self.device is not None:
             self.DestroyDevice(self.device, vk.NULL)

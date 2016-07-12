@@ -505,6 +505,7 @@ STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 45
 STRUCTURE_TYPE_MEMORY_BARRIER = 46
 STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = 47
 STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = 48
+STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000
 
 # VkSubpassContents
 SUBPASS_CONTENTS_INLINE = 0
@@ -850,7 +851,7 @@ define_structure('DeviceCreateInfo',
     ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('queue_create_info_count', c_uint),
     ('queue_create_infos', POINTER(DeviceQueueCreateInfo)), ('enabled_layer_count', c_uint),
     ('enabled_layer_names', POINTER(c_char_p)), ('enabled_extension_count', c_uint),
-    ('enabled_extension_names', POINTER(c_char_p)), ('enabled_features', c_void_p)
+    ('enabled_extension_names', POINTER(c_char_p)), ('enabled_features', c_void_p),
 )
 
 define_structure('Win32SurfaceCreateInfoKHR',
@@ -875,10 +876,13 @@ INSTANCE_FUNCTIONS = (
     (b'vkGetPhysicalDeviceQueueFamilyProperties', None, PhysicalDevice, POINTER(c_uint), POINTER(QueueFamilyProperties)),
     (b'vkCreateDevice', c_uint, PhysicalDevice, POINTER(DeviceCreateInfo), c_void_p, POINTER(Device)),
     (b'vkGetDeviceProcAddr', c_void_p, Device, c_char_p),
+    (b'vkCreateWin32SurfaceKHR', c_uint, Instance, POINTER(Win32SurfaceCreateInfoKHR), c_void_p, POINTER(SurfaceKHR)),
+    (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, c_void_p)
 )
 
 DEVICE_FUNCTIONS = (
     (b'vkDestroyDevice', None, Device, c_void_p),
+    
 )
 
 def load_functions(owner, obj, functions_list, loader):
