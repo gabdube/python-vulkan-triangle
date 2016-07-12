@@ -1,7 +1,7 @@
 """
     Minimalistic wrapper over the Windows window api
 """
-from vk import SurfaceKHR, SUCCESS
+import vk
 
 from ctypes import *
 from ctypes.wintypes import *
@@ -201,15 +201,20 @@ class Win32Window(object):
 class WinSwapchain(object):
 
     def create_surface(self):
-        surface = SurfaceKHR(0)
+        """
+            Create a surface for the window
+        """
+        
+        app = self.app
+        surface = vk.SurfaceKHR(0)
         surface_info = vk.Win32SurfaceCreateInfoKHR(
             s_type = vk.STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-            next= vk.NULL, flags=0, hinstance=get_instance(),
-            hwnd=GetModuleHandleW(None)
+            next= vk.NULL, flags=0, hinstance=GetModuleHandleW(None),
+            hwnd=app.window.handle
         )
 
         result = app.CreateWin32SurfaceKHR(app.instance, byref(surface_info),NULL, byref(surface))
-        if result == SUCCESS:
+        if result == vk.SUCCESS:
             self.surface = surface
         else:
             raise RuntimeError("Failed to create surface")
@@ -218,6 +223,7 @@ class WinSwapchain(object):
         # Circular dependency is ok because its a demo. Otherwise I would have used weakref
         self.app = app 
         self.surface = None
+        self.create_surface()
 
     def destroy(self):
         app = self.app

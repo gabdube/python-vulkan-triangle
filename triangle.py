@@ -71,13 +71,15 @@ class Application(object):
         # For this example use the first available device
         self.gpu = vk.PhysicalDevice(buf[0])
 
-        # Find a graphic queue that supports graphic operation
+        # Find a graphic queue that supports graphic operation and presentation into
+        # the surface previously created
         queue_families_count = c_uint(0)
         self.GetPhysicalDeviceQueueFamilyProperties(
             self.gpu,
             byref(queue_families_count),
             cast(vk.NULL, POINTER(vk.QueueFamilyProperties))
         )
+        
         if queue_families_count.value == 0:
             raise RuntimeError('No queues families found for the default GPU')
 
@@ -88,13 +90,16 @@ class Application(object):
             cast(queue_families, POINTER(vk.QueueFamilyProperties))
         )
 
+        surface = self.swapchain.surface
+        supported = vk.c_uint(0)
         for index, queue in enumerate(queue_families):
-            if queue.queue_flags & vk.QUEUE_GRAPHICS_BIT != 0:
+            self.GetPhysicalDeviceSurfaceSupportKHR(self.gpu, index, surface, byref(supported))
+            if queue.queue_flags & vk.QUEUE_GRAPHICS_BIT != 0 and supported.value == 1:
                 self.main_queue_family = index
                 break
 
         if self.main_queue_family is None:
-            raise OSError("Could not find a queue that supports graphics")
+            raise OSError("Could not find a queue that supports graphics and presenting")
 
         # Create the device
         priorities = (c_float*1)(0.0)
@@ -128,27 +133,46 @@ class Application(object):
         else:
             raise RuntimeError('Could not create device.')
 
+    def create_swapchain(self):
+        self.swapchain = Swapchain(self)
+
     def create_command_pool(self):
-        pass
+        create_info = vk.CommandPoolCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, next= vk.NULL,
+            flags=vk.COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT,
+            queue_family_index=self.main_queue_family
+        )
+
+        pool = vk.CommandPool(0)
+        result = self.CreateCommandPool(self.device, byref(create_info), vk.NULL, byref(pool))
+        if result == vk.SUCCESS:
+            self.cmd_pool = pool
+        else:
+            raise RuntimeError('Could not create command pool')
 
     def __init__(self):
         self.instance = None
         self.device = None
         self.swapchain = None
+        self.cmd_pool = None
         self.window = Window()
 
         self.create_instance()
+        self.create_swapchain()
         self.create_device()
-        self.swapchain = Swapchain(self)
+        self.create_command_pool()
 
         self.window.show()
 
     def __del__(self):
         if self.instance is None:
-            return # If initialization failed, there is nothing to free
+            return
 
         if self.swapchain is not None:
             self.swapchain.destroy()
+
+        if self.cmd_pool:
+            self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)
 
         if self.device is not None:
             self.DestroyDevice(self.device, vk.NULL)

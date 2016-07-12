@@ -859,6 +859,10 @@ define_structure('Win32SurfaceCreateInfoKHR',
     ('hwnd', c_void_p)
 )
 
+define_structure('CommandPoolCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('queue_family_index', c_uint)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -877,12 +881,14 @@ INSTANCE_FUNCTIONS = (
     (b'vkCreateDevice', c_uint, PhysicalDevice, POINTER(DeviceCreateInfo), c_void_p, POINTER(Device)),
     (b'vkGetDeviceProcAddr', c_void_p, Device, c_char_p),
     (b'vkCreateWin32SurfaceKHR', c_uint, Instance, POINTER(Win32SurfaceCreateInfoKHR), c_void_p, POINTER(SurfaceKHR)),
-    (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, c_void_p)
+    (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, c_void_p),
+    (b'vkGetPhysicalDeviceSurfaceSupportKHR', c_uint, PhysicalDevice, c_uint, SurfaceKHR, POINTER(c_uint)),
 )
 
 DEVICE_FUNCTIONS = (
     (b'vkDestroyDevice', None, Device, c_void_p),
-    
+    (b'vkCreateCommandPool', c_uint, Device, POINTER(CommandPoolCreateInfo), c_void_p, POINTER(CommandPool)),
+    (b'vkDestroyCommandPool', Device, CommandPool, c_void_p)
 )
 
 def load_functions(owner, obj, functions_list, loader):
