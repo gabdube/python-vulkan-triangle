@@ -113,7 +113,6 @@ PostQuitMessage.argtypes = (c_int,)
 
 def wndproc(window, hwnd, msg, w, l):
     if msg == WM_CREATE:
-        ShowWindow(hwnd, SW_SHOWNORMAL)
         return 0
     elif msg == WM_CLOSE:
         DestroyWindow(hwnd)
@@ -189,3 +188,6 @@ class Win32Window(object):
             DestroyWindow(self.__hwnd)
 
         UnregisterClassW(self.__class_name, GetModuleHandleW(None))
+
+    def show(self):
+        ShowWindow(self.__hwnd, SW_SHOWNORMAL)

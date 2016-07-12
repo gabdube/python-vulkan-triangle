@@ -10,6 +10,7 @@ from sys import modules
 
 NULL = c_void_p(0)
 NULL_LAYERS = cast(NULL, POINTER(c_char_p))
+NULL_HANDLE = c_size_t(0)
 
 ### HANDLES ###
 
@@ -833,6 +834,30 @@ define_structure('InstanceCreateInfo',
  ('enabled_layer_count', c_uint), ('enabled_layer_names', POINTER(c_char_p)), ('enabled_extension_count', c_uint),
  ('enabled_extension_names', POINTER(c_char_p)))
 
+define_structure('VkExtent3D', ('width', c_uint), ('height', c_uint), ('depth', c_uint))
+
+define_structure('QueueFamilyProperties',
+  ('queue_flags', c_uint), ('queue_count', c_uint), ('timestamp_valid_bits', c_uint),
+  ('min_image_transfer_granularity', VkExtent3D)
+)
+
+define_structure('DeviceQueueCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('queue_family_index', c_uint),
+    ('queue_count', c_uint), ('queue_priorities', POINTER(c_float))    
+)
+
+define_structure('DeviceCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('queue_create_info_count', c_uint),
+    ('queue_create_infos', POINTER(DeviceQueueCreateInfo)), ('enabled_layer_count', c_uint),
+    ('enabled_layer_names', POINTER(c_char_p)), ('enabled_extension_count', c_uint),
+    ('enabled_extension_names', POINTER(c_char_p)), ('enabled_features', c_void_p)
+)
+
+define_structure('Win32SurfaceCreateInfoKHR',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('hinstance', c_void_p),
+    ('hwnd', c_void_p)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -846,14 +871,27 @@ CreateInstance = (CFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINT
 
 INSTANCE_FUNCTIONS = (
     (b'vkDestroyInstance', None, Instance, c_void_p),
+    (b'vkEnumeratePhysicalDevices', c_uint, Instance, POINTER(c_uint), POINTER(PhysicalDevice)),
+    (b'vkGetPhysicalDeviceQueueFamilyProperties', None, PhysicalDevice, POINTER(c_uint), POINTER(QueueFamilyProperties)),
+    (b'vkCreateDevice', c_uint, PhysicalDevice, POINTER(DeviceCreateInfo), c_void_p, POINTER(Device)),
+    (b'vkGetDeviceProcAddr', c_void_p, Device, c_char_p),
 )
 
-def load_instance_functions(owner, instance):
+DEVICE_FUNCTIONS = (
+    (b'vkDestroyDevice', None, Device, c_void_p),
+)
+
+def load_functions(owner, obj, functions_list, loader):
     """
-        Not generated! Load the vulkan instance functions and add them to owner
+        Not generated! Load the vulkan functions
     """
-    for name, return_type, *args in INSTANCE_FUNCTIONS:
+    for name, return_type, *args in functions_list:
         py_name = name.decode()[2::]
-        fn = (CFUNCTYPE(return_type, *args))(GetInstanceProcAddr(instance, name))
+        fn = (CFUNCTYPE(return_type, *args))(loader(obj, name))
         setattr(owner, py_name, fn)
 
+def load_instance_functions(owner, instance):
+    load_functions(owner, instance, INSTANCE_FUNCTIONS, GetInstanceProcAddr)
+
+def load_device_functions(owner, device, loader):
+    load_functions(owner, device, DEVICE_FUNCTIONS, loader)
