@@ -150,17 +150,45 @@ class Application(object):
         else:
             raise RuntimeError('Could not create command pool')
 
+    def create_setup_buffer(self):
+        create_info = vk.CommandBufferAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            next=vk.NULL, command_pool=self.cmd_pool, level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
+            command_buffer_count=1
+        )
+        begin_info = vk.CommandBufferBeginInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            next=vk.NULL, flags= 0, inheritance_info=vk.NULL
+        )
+
+        buffer = vk.CommandBuffer(0)
+        result = self.AllocateCommandBuffers(self.device, byref(create_info), byref(buffer))
+        if result == vk.SUCCESS:
+            self.setup_buffer = buffer
+        else:
+            raise RuntimeError('Failed to create setup buffer')
+
+        if self.BeginCommandBuffer(buffer, byref(begin_info)) != vk.SUCCESS:
+            raise RuntimeError('Failed to start recording in the setup buffer')
+
+    def flush_setup_buffer(self):
+        if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
+            raise RuntimeError('Failed to end setup command buffer')
+
     def __init__(self):
         self.instance = None
         self.device = None
         self.swapchain = None
         self.cmd_pool = None
+        self.setup_buffer = None
         self.window = Window()
 
         self.create_instance()
         self.create_swapchain()
         self.create_device()
         self.create_command_pool()
+        self.create_setup_buffer()
+        self.flush_setup_buffer()
 
         self.window.show()
 
@@ -170,6 +198,9 @@ class Application(object):
 
         if self.swapchain is not None:
             self.swapchain.destroy()
+
+        if self.setup_buffer != None:
+            self.vkFreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
 
         if self.cmd_pool:
             self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)

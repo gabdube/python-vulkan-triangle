@@ -863,6 +863,16 @@ define_structure('CommandPoolCreateInfo',
     ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('queue_family_index', c_uint)
 )
 
+define_structure('CommandBufferAllocateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('command_pool', CommandPool),
+    ('level', c_uint), ('command_buffer_count', c_uint)
+)
+
+define_structure('CommandBufferBeginInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('inheritance_info', c_void_p)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -888,7 +898,10 @@ INSTANCE_FUNCTIONS = (
 DEVICE_FUNCTIONS = (
     (b'vkDestroyDevice', None, Device, c_void_p),
     (b'vkCreateCommandPool', c_uint, Device, POINTER(CommandPoolCreateInfo), c_void_p, POINTER(CommandPool)),
-    (b'vkDestroyCommandPool', Device, CommandPool, c_void_p)
+    (b'vkDestroyCommandPool', None, Device, CommandPool, c_void_p),
+    (b'vkAllocateCommandBuffers', c_uint, Device, c_void_p, POINTER(CommandBuffer)),
+    (b'vkBeginCommandBuffer', c_uint, CommandBuffer, POINTER(CommandBufferBeginInfo)),
+    (b'vkEndCommandBuffer', c_uint, CommandBuffer),
 )
 
 def load_functions(owner, obj, functions_list, loader):
