@@ -505,6 +505,7 @@ STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER = 45
 STRUCTURE_TYPE_MEMORY_BARRIER = 46
 STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = 47
 STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = 48
+STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000
 STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000
 
 # VkSubpassContents
@@ -835,11 +836,12 @@ define_structure('InstanceCreateInfo',
  ('enabled_layer_count', c_uint), ('enabled_layer_names', POINTER(c_char_p)), ('enabled_extension_count', c_uint),
  ('enabled_extension_names', POINTER(c_char_p)))
 
-define_structure('VkExtent3D', ('width', c_uint), ('height', c_uint), ('depth', c_uint))
+define_structure('Extent3D', ('width', c_uint), ('height', c_uint), ('depth', c_uint))
+define_structure('Extent2D', ('width', c_uint), ('height', c_uint))
 
 define_structure('QueueFamilyProperties',
   ('queue_flags', c_uint), ('queue_count', c_uint), ('timestamp_valid_bits', c_uint),
-  ('min_image_transfer_granularity', VkExtent3D)
+  ('min_image_transfer_granularity', Extent3D)
 )
 
 define_structure('DeviceQueueCreateInfo',
@@ -873,6 +875,25 @@ define_structure('CommandBufferBeginInfo',
     ('inheritance_info', c_void_p)
 )
 
+define_structure('SurfaceCapabilitiesKHR',
+    ('min_image_count', c_uint), ('max_image_count', c_uint), ('current_extent', Extent2D),
+    ('minImageExtent', Extent2D), ('maxImageExtent', Extent2D), ('max_image_array_layers', c_uint),
+    ('supported_transforms', c_uint), ('current_transform', c_uint),
+    ('supported_composite_alpha', c_uint), ('supported_usage_flags', c_uint)
+)
+
+define_structure('SurfaceFormatKHR', ('format', c_uint), ('color_space', c_uint))
+
+define_structure('SwapchainCreateInfoKHR',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('surface', SurfaceKHR),
+    ('min_image_count', c_uint), ('format', c_uint), ('color_space_khr', c_uint),
+    ('image_extent', Extent2D), ('image_array_layers', c_uint), ('image_usage', c_uint),
+    ('image_sharing_mode', c_uint), ('queue_family_index_count', c_uint),
+    ('queue_family_indices', POINTER(c_uint)), ('pre_transform', c_uint),
+    ('composite_alpha', c_uint), ('present_mode', c_uint), ('clipped', c_uint),
+    ('old_swapchain', SwapchainKHR)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -893,6 +914,10 @@ INSTANCE_FUNCTIONS = (
     (b'vkCreateWin32SurfaceKHR', c_uint, Instance, POINTER(Win32SurfaceCreateInfoKHR), c_void_p, POINTER(SurfaceKHR)),
     (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, c_void_p),
     (b'vkGetPhysicalDeviceSurfaceSupportKHR', c_uint, PhysicalDevice, c_uint, SurfaceKHR, POINTER(c_uint)),
+    (b'vkGetPhysicalDeviceSurfaceCapabilitiesKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(SurfaceCapabilitiesKHR)),
+    (b'vkGetPhysicalDeviceSurfacePresentModesKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(c_uint)),
+    (b'vkGetPhysicalDeviceSurfaceFormatsKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR)),
+
 )
 
 DEVICE_FUNCTIONS = (
@@ -902,6 +927,9 @@ DEVICE_FUNCTIONS = (
     (b'vkAllocateCommandBuffers', c_uint, Device, c_void_p, POINTER(CommandBuffer)),
     (b'vkBeginCommandBuffer', c_uint, CommandBuffer, POINTER(CommandBufferBeginInfo)),
     (b'vkEndCommandBuffer', c_uint, CommandBuffer),
+    (b'vkCreateSwapchainKHR', c_uint, Device, POINTER(SwapchainCreateInfoKHR), c_void_p, POINTER(SwapchainKHR)),
+    (b'vkDestroySwapchainKHR', None, Device, SwapchainKHR, c_void_p),
+
 )
 
 def load_functions(owner, obj, functions_list, loader):

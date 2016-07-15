@@ -14,11 +14,122 @@ from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float
 
 system_name = platform.system()
 if system_name == 'Windows':
-    from win32 import Win32Window as Window, WinSwapchain as Swapchain
+    from win32 import Win32Window as Window, WinSwapchain as BaseSwapchain
 elif system_name == 'Linux':
-    from xlib import XlibWindow as Window, XlibSwapchain as Swapchain
+    from xlib import XlibWindow as Window, XlibSwapchain as BaseSwapchain
 else:
     raise OSError("Platform not supported")
+
+class Swapchain(BaseSwapchain):
+
+    def __init__(self, app):
+        # Circular dependency is ok because its a demo. Otherwise I would have used weakref
+        self.app = app
+        self.swapchain = None
+        self.images = None
+
+        super().__init__()
+
+    def create(self):
+        app = self.app
+        
+        # Get the physical device surface capabilities (properties and format)
+        cap = vk.SurfaceCapabilitiesKHR()
+        result = app.GetPhysicalDeviceSurfaceCapabilitiesKHR(app.gpu, self.surface, byref(cap))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Failed to get surface capabilities')
+
+        # Get the available present mode
+        prez_count = c_uint(0)
+        result = app.GetPhysicalDeviceSurfacePresentModesKHR(app.gpu, self.surface, byref(prez_count), cast(vk.NULL, POINTER(c_uint)))
+        if result != vk.SUCCESS and prez_count.value > 0:
+            raise RuntimeError('Failed to get surface presenting mode')
+        
+        prez = (c_uint*prez_count.value)()
+        app.GetPhysicalDeviceSurfacePresentModesKHR(app.gpu, self.surface, byref(prez_count), cast(prez, POINTER(c_uint)) )
+
+        if cap.current_extent.width == -1:
+            # If the surface size is undefined, the size is set to the size of the images requested
+            width, height = app.window.dimensions()
+            swapchain_extent = vk.Extent2D(width=width, height=height)
+        else:
+            # If the surface size is defined, the swap chain size must match
+            # The client most likely uses windowed mode
+            swapchain_extent = cap.current_extent
+            width = swapchain_extent.width
+            height = swapchain_extent.height
+
+        # Prefer mailbox mode if present, it's the lowest latency non-tearing present  mode
+        present_mode = vk.PRESENT_MODE_FIFO_KHR
+        if vk.PRESENT_MODE_MAILBOX_KHR in prez:
+            present_mode = vk.PRESENT_MODE_MAILBOX_KHR
+        elif vk.PRESENT_MODE_IMMEDIATE_KHR in prez:
+            present_mode = vk.PRESENT_MODE_IMMEDIATE_KHR
+
+        # Get the number of images
+        swapchain_image_count = cap.min_image_count + 1
+        if cap.max_image_count > 0 and swapchain_image_count > cap.max_image_count:
+            swapchain_image_count = cap.max_image_count
+
+        # Default image transformation (use identity if supported)
+        transform = cap.current_transform
+        if cap.supported_transforms & vk.SURFACE_TRANSFORM_IDENTITY_BIT_KHR != 0:
+            transform = vk.SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+
+        # Get the supported image format
+        format_count = c_uint(0)
+        result = app.GetPhysicalDeviceSurfaceFormatsKHR(app.gpu, self.surface, byref(format_count), cast(vk.NULL, POINTER(vk.SurfaceFormatKHR)))
+        if result != vk.SUCCESS and format_count.value > 0:
+            raise RuntimeError('Failed to get surface available image format')
+
+        formats = (vk.SurfaceFormatKHR*format_count.value)()
+        app.GetPhysicalDeviceSurfaceFormatsKHR(app.gpu, self.surface, byref(format_count), cast(formats, POINTER(vk.SurfaceFormatKHR)))
+
+        # If the surface format list only includes one entry with VK_FORMAT_UNDEFINED,
+		# there is no preferered format, so we assume VK_FORMAT_B8G8R8A8_UNORM
+        if format_count == 1 and formats[0].format == vk.FORMAT_UNDEFINED:
+            color_format = vk.FORMAT_B8G8R8A8_UNORM
+        else:
+            # Else select the first format
+            color_format = formats[0].format
+
+        color_space = formats[0].color_space
+
+        #Create the swapchain
+        create_info = vk.SwapchainCreateInfoKHR(
+            s_type=vk.STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, next=vk.NULL, 
+            flags=0, surface=self.surface, min_image_count=swapchain_image_count,
+            image_format=color_format, image_color_space=color_space, 
+            image_extent=swapchain_extent, image_array_layers=1, image_usage=vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            image_sharing_mode=vk.SHARING_MODE_EXCLUSIVE, queue_family_index_count=0,
+            queue_family_indices=cast(vk.NULL, POINTER(c_uint)), pre_transform=transform, 
+            composite_alpha=vk.COMPOSITE_ALPHA_OPAQUE_BIT_KHR, present_mode=present_mode,
+            clipped=1, old_swapchain=vk.SwapchainKHR(0)
+        )
+
+        swapchain = vk.SwapchainKHR(0)
+        result = app.CreateSwapchainKHR(app.device, byref(create_info), vk.NULL, byref(swapchain))
+        if result == vk.SUCCESS:
+            self.swapchain = swapchain
+            self.images = (vk.Image * swapchain_image_count )()
+            self.create_images()
+        else:
+            raise RuntimeError('Failed to create the swapchain')
+        
+    def create_images(self):
+        pass
+
+
+    def destroy_swapchain(self):
+        app = self.app
+        app.DestroySwapchainKHR(app.device, self.swapchain, vk.NULL)
+
+    def destroy(self):
+        app = self.app
+        self.destroy_swapchain()
+        app.DestroySurfaceKHR(app.instance, self.surface, NULL)
+        
+
 
 class Application(object):
 
@@ -176,6 +287,7 @@ class Application(object):
             raise RuntimeError('Failed to end setup command buffer')
 
     def __init__(self):
+        self.gpu = None
         self.instance = None
         self.device = None
         self.swapchain = None
@@ -187,7 +299,9 @@ class Application(object):
         self.create_swapchain()
         self.create_device()
         self.create_command_pool()
+
         self.create_setup_buffer()
+        self.swapchain.create()
         self.flush_setup_buffer()
 
         self.window.show()

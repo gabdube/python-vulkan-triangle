@@ -110,6 +110,10 @@ PostQuitMessage = u32.PostQuitMessage
 PostQuitMessage.restype = None
 PostQuitMessage.argtypes = (c_int,)
 
+GetClientRect = u32.GetClientRect
+GetClientRect.restype = result_not_null('Failed to get window dimensions')
+GetClientRect.argtypes = (HWND, POINTER(RECT))
+
 ################
 
 def wndproc(window, hwnd, msg, w, l):
@@ -194,6 +198,11 @@ class Win32Window(object):
     def handle(self):
         return self.__hwnd
 
+    def dimensions(self):
+        dim = RECT()
+        GetClientRect(self.__hwnd, byref(dim))
+        return (dim.right, dim.bottom)
+
     def show(self):
         ShowWindow(self.__hwnd, SW_SHOWNORMAL)
 
@@ -219,15 +228,7 @@ class WinSwapchain(object):
         else:
             raise RuntimeError("Failed to create surface")
 
-    def __init__(self, app):
-        # Circular dependency is ok because its a demo. Otherwise I would have used weakref
-        self.app = app 
+    def __init__(self):
         self.surface = None
         self.create_surface()
-
-    def destroy(self):
-        app = self.app
-        app.DestroySurfaceKHR(app.instance, self.surface, NULL)
-        
-
         
