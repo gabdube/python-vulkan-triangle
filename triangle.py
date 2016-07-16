@@ -27,7 +27,7 @@ class Swapchain(BaseSwapchain):
 
     def create(self):
         app = self.app()
-        
+
         # Get the physical device surface capabilities (properties and format)
         cap = vk.SurfaceCapabilitiesKHR()
         result = app.GetPhysicalDeviceSurfaceCapabilitiesKHR(app.gpu, self.surface, byref(cap))
@@ -105,13 +105,15 @@ class Swapchain(BaseSwapchain):
         swapchain = vk.SwapchainKHR(0)
         result = app.CreateSwapchainKHR(app.device, byref(create_info), vk.NULL, byref(swapchain))
         if result == vk.SUCCESS:
+            if self.swapchain is not None: #Destroy the old swapchain if it exists
+                self.destroy_swapchain()
             self.swapchain = swapchain
             self.create_images(swapchain_image_count, color_format)
         else:
             raise RuntimeError('Failed to create the swapchain')
         
     def create_images(self, image_count, color_format):
-        self.images = (vk.Image * image_count )()
+        self.images = (vk.Image * image_count)()
         self.views = (vk.ImageView * image_count)()
         app = self.app()
 
@@ -357,6 +359,60 @@ class Application(object):
             self.present_buffers = present_buffers
         else:
             raise RuntimeError('Failed to present buffers')
+    
+    def create_depth_stencil(self):
+        width, height = self.window.dimensions()
+
+        # Find a supported depth format
+        depth_format = None
+        depth_formats = (
+            vk.FORMAT_D32_SFLOAT_S8_UINT,
+            vk.FORMAT_D32_SFLOAT,
+            vk.FORMAT_D24_UNORM_S8_UINT,
+            vk.FORMAT_D16_UNORM_S8_UINT,
+            vk.FORMAT_D16_UNORM,
+        )
+
+        format_props = vk.FormatProperties()
+        for format in depth_formats:
+            self.GetPhysicalDeviceFormatProperties(self.gpu, format, byref(format_props));
+            if format_props.optimal_tiling_features & vk.FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT != 0:
+                depth_format = format
+                break
+
+        if depth_format is None:
+            raise RuntimeError('Could not find a valid depth format')
+
+        create_info = vk.ImageCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_IMAGE_CREATE_INFO, next=vk.NULL, flags=0,
+            image_type=vk.IMAGE_TYPE_2D, format=depth_format,
+            extent=vk.Extent3D(width, height, 1), mip_levels=1,
+            array_layers=1, samples=vk.SAMPLE_COUNT_1_BIT, tiling=vk.IMAGE_TILING_OPTIMAL,
+            usage=vk.IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | vk.IMAGE_USAGE_TRANSFER_SRC_BIT,
+        )
+
+        subres_range = vk.ImageSubresourceRange(
+            aspect_mask=vk.IMAGE_ASPECT_DEPTH_BIT, base_mip_level=0,
+            level_count=1, base_array_layer=1, layer_count=1,
+        )
+
+        create_view_info = vk.ImageViewCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, next=vk.NULL,
+            flags=0, view_type=vk.IMAGE_VIEW_TYPE_2D, format=depth_format,
+            subresource_range=subres_range
+        )
+
+        mem_alloc_info = vk.MemoryAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            allocation_size=0, memory_type_index=0
+        )
+
+        depthstencil_image = vk.Image(0)
+        result=self.CreateImage(self.device, byref(create_info), vk.NULL, byref(depthstencil_image))
+        if result != vk.SUCCESS:
+            raise RuntimeError("Failed to create depth stencil image")
+
+        self.depth_stencil['image'] = depthstencil_image
 
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
@@ -449,6 +505,7 @@ class Application(object):
         self.setup_buffer = None
         self.draw_buffers = None
         self.present_buffers = None
+        self.depth_stencil = {'image':None, 'mem':None, 'view':None}
         self.window = Window()
 
         self.create_instance()
@@ -459,6 +516,7 @@ class Application(object):
         self.create_setup_buffer()
         self.swapchain.create()
         self.create_draw_buffers()
+        self.create_depth_stencil()
         self.flush_setup_buffer()
 
         self.window.show()
@@ -477,6 +535,9 @@ class Application(object):
             len_draw_buffers = len(self.draw_buffers)
             self.FreeCommandBuffers(self.device, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
             self.FreeCommandBuffers(self.device, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
+
+        if self.depth_stencil['image'] is not None:
+            self.DestroyImage(self.device, self.depth_stencil['image'], vk.NULL)
 
         if self.cmd_pool:
             self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)

@@ -939,6 +939,24 @@ define_structure('SubmitInfo',
     ('signal_semaphore_count', c_uint), ('signal_semaphores', POINTER(Semaphore))
 )
 
+define_structure('ImageCreateInfo', 
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('image_type', c_uint),
+    ('format', c_uint), ('extent', Extent3D), ('mip_levels', c_uint), ('array_layers', c_uint),
+    ('samples', c_uint), ('tiling', c_uint), ('usage', c_uint), ('sharing_mode', c_uint),
+    ('queue_family_index_count', c_uint), ('queue_family_indices', POINTER(c_uint)),
+    ('initial_layout', c_uint)
+)
+
+define_structure('FormatProperties', 
+    ('linear_tiling_features', c_uint), ('optimal_tiling_features', c_uint),
+    ('buffer_features', c_uint)
+)
+
+define_structure('MemoryAllocateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('allocation_size', c_size_t),
+    ('memory_type_index', c_uint)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -962,6 +980,7 @@ INSTANCE_FUNCTIONS = (
     (b'vkGetPhysicalDeviceSurfaceCapabilitiesKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(SurfaceCapabilitiesKHR)),
     (b'vkGetPhysicalDeviceSurfacePresentModesKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(c_uint)),
     (b'vkGetPhysicalDeviceSurfaceFormatsKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR)),
+    (b'vkGetPhysicalDeviceFormatProperties', None, PhysicalDevice, c_uint, POINTER(FormatProperties)),
 
 )
 
@@ -981,7 +1000,9 @@ DEVICE_FUNCTIONS = (
     (b'vkQueueWaitIdle', c_uint, Queue),
     (b'vkGetDeviceQueue', None, Device, c_uint, c_uint, POINTER(Queue)),
     (b'vkFreeCommandBuffers', None, Device, CommandPool, c_uint, POINTER(CommandBuffer)),
-    (b'vkDestroyImageView', None, Device, ImageView, c_void_p)
+    (b'vkDestroyImageView', None, Device, ImageView, c_void_p),
+    (b'vkCreateImage', c_uint, Device, POINTER(ImageCreateInfo), c_void_p, POINTER(Image)),
+    (b'vkDestroyImage', None, Device, Image, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):
