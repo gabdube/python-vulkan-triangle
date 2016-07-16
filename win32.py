@@ -233,5 +233,6 @@ class WinSwapchain(object):
         self.surface = None
         self.swapchain = None
         self.images = None
+        self.views = None
         self.create_surface()
         

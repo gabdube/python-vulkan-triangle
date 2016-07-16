@@ -934,7 +934,7 @@ define_structure('ImageMemoryBarrier',
 
 define_structure('SubmitInfo',
     ('s_type', c_uint), ('next', c_void_p), ('wait_semaphore_count', c_uint),
-    ('wait_semaphores', POINTER(Semaphore)), ('wait_dst_stage_mask', c_uint),
+    ('wait_semaphores', POINTER(Semaphore)), ('wait_dst_stage_mask', POINTER(c_uint) ),
     ('command_buffer_count', c_uint), ('command_buffers', POINTER(CommandBuffer)),
     ('signal_semaphore_count', c_uint), ('signal_semaphores', POINTER(Semaphore))
 )
@@ -981,6 +981,7 @@ DEVICE_FUNCTIONS = (
     (b'vkQueueWaitIdle', c_uint, Queue),
     (b'vkGetDeviceQueue', None, Device, c_uint, c_uint, POINTER(Queue)),
     (b'vkFreeCommandBuffers', None, Device, CommandPool, c_uint, POINTER(CommandBuffer)),
+    (b'vkDestroyImageView', None, Device, ImageView, c_void_p)
 )
 
 def load_functions(owner, obj, functions_list, loader):

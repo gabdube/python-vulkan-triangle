@@ -112,6 +112,7 @@ class Swapchain(BaseSwapchain):
         
     def create_images(self, image_count, color_format):
         self.images = (vk.Image * image_count )()
+        self.views = (vk.ImageView * image_count)()
         app = self.app()
 
         image_count = c_uint(image_count)
@@ -146,11 +147,15 @@ class Swapchain(BaseSwapchain):
 
             view = vk.ImageView(0)
             result = app.CreateImageView(app.device, byref(view_create_info), vk.NULL, byref(view))
-            if result != vk.SUCCESS:
+            if result == vk.SUCCESS:
+                self.views[index] = view
+            else:
                 raise RuntimeError('Failed to create an image view.')
 
     def destroy_swapchain(self):
         app = self.app()
+        for view in self.views:
+            app.DestroyImageView(app.device, view, vk.NULL)
         app.DestroySwapchainKHR(app.device, self.swapchain, vk.NULL)
 
     def destroy(self):
@@ -321,6 +326,38 @@ class Application(object):
         if self.BeginCommandBuffer(buffer, byref(begin_info)) != vk.SUCCESS:
             raise RuntimeError('Failed to start recording in the setup buffer')
 
+    def create_draw_buffers(self):
+        # Create one command buffer per frame buffer
+        # in the swap chain
+        # Command buffers store a reference to the
+        # frame buffer inside their render pass info
+        # so for static usage withouth having to rebuild
+        # them each frame, we use one per frame buffer
+        image_count = len(self.swapchain.images)
+        draw_buffers = (vk.CommandBuffer*image_count)()
+
+        alloc_info = vk.CommandBufferAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            next=vk.NULL, command_pool=self.cmd_pool, level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
+            command_buffer_count=image_count
+        )
+
+        result = self.AllocateCommandBuffers(self.device, byref(alloc_info), cast(draw_buffers, POINTER(vk.CommandBuffer)))
+        if result == vk.SUCCESS:
+            self.draw_buffers = draw_buffers
+        else:
+            raise RuntimeError('Failed to drawing buffers')
+
+        # Command buffers for submitting present barriers
+        alloc_info.command_buffer_count = 2
+        present_buffers = (vk.CommandBuffer*2)()
+
+        result = self.AllocateCommandBuffers(self.device, byref(alloc_info), cast(present_buffers, POINTER(vk.CommandBuffer)))
+        if result == vk.SUCCESS:
+            self.present_buffers = present_buffers
+        else:
+            raise RuntimeError('Failed to present buffers')
+
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
             raise RuntimeError('Failed to end setup command buffer')
@@ -328,18 +365,19 @@ class Application(object):
         submit_info = vk.SubmitInfo(
             s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
             wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
-            wait_dst_stage_mask=0, command_buffer_count=1,
+            wait_dst_stage_mask=cast(vk.NULL, POINTER(c_uint)),
+            command_buffer_count=1,
             command_buffers=pointer(self.setup_buffer),
             signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
         )
 
-        # result = self.QueueSubmit(self.queue, 1, byref(submit_info), 0)
-        # if result != vk.SUCCESS:
-        #     raise RuntimeError("Setup buffer sumbit failed")
+        result = self.QueueSubmit(self.queue, 1, byref(submit_info), 0)
+        if result != vk.SUCCESS:
+            raise RuntimeError("Setup buffer sumbit failed")
         
-        # result = self.QueueWaitIdle(self.queue)
-        # if result != vk.SUCCESS:
-        #     raise RuntimeError("Setup execution failed")
+        result = self.QueueWaitIdle(self.queue)
+        if result != vk.SUCCESS:
+            raise RuntimeError("Setup execution failed")
 
         self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
         self.setup_buffer = None
@@ -409,6 +447,8 @@ class Application(object):
         self.swapchain = None
         self.cmd_pool = None
         self.setup_buffer = None
+        self.draw_buffers = None
+        self.present_buffers = None
         self.window = Window()
 
         self.create_instance()
@@ -417,7 +457,8 @@ class Application(object):
         self.create_command_pool()
 
         self.create_setup_buffer()
-        #self.swapchain.create()
+        self.swapchain.create()
+        self.create_draw_buffers()
         self.flush_setup_buffer()
 
         self.window.show()
@@ -429,8 +470,13 @@ class Application(object):
         if self.swapchain is not None:
             self.swapchain.destroy()
 
-        if self.setup_buffer != None:
+        if self.setup_buffer is not None:
             self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
+
+        if self.present_buffers is not None:
+            len_draw_buffers = len(self.draw_buffers)
+            self.FreeCommandBuffers(self.device, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
+            self.FreeCommandBuffers(self.device, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
 
         if self.cmd_pool:
             self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)
