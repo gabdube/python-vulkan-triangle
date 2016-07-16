@@ -11,6 +11,7 @@ from sys import modules
 NULL = c_void_p(0)
 NULL_LAYERS = cast(NULL, POINTER(c_char_p))
 NULL_HANDLE = c_size_t(0)
+NULL_HANDLE_PTR = cast(NULL, POINTER(c_size_t) )
 
 ### HANDLES ###
 
@@ -47,6 +48,22 @@ DebugReportCallbackEXT = c_size_t
 
 ### ENUMS ###
 
+LOD_CLAMP_NONE = c_float(1000)
+REMAINING_MIP_LEVELS = c_uint(-1)
+REMAINING_ARRAY_LAYERS = c_uint(-1)
+WHOLE_SIZE = c_size_t(-1)
+ATTACHMENT_UNUSED = c_uint(-1)
+TRUE = 1
+FALSE =  0
+QUEUE_FAMILY_IGNORED = c_uint(-1)
+SUBPASS_EXTERNAL = c_uint(-1)
+MAX_PHYSICAL_DEVICE_NAME_SIZE = 256
+UUID_SIZE = 16
+MAX_MEMORY_TYPES = 32
+MAX_MEMORY_HEAPS = 16
+MAX_EXTENSION_NAME_SIZE = 256
+MAX_DESCRIPTION_SIZE = 256
+
 # VkImageLayout
 IMAGE_LAYOUT_UNDEFINED = 0
 IMAGE_LAYOUT_GENERAL = 1
@@ -57,6 +74,7 @@ IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL = 5
 IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL = 6
 IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL = 7
 IMAGE_LAYOUT_PREINITIALIZED = 8
+IMAGE_LAYOUT_PRESENT_SRC_KHR = 1000001002
 
 # VkAttachmentLoadOp
 ATTACHMENT_LOAD_OP_LOAD = 0
@@ -894,6 +912,33 @@ define_structure('SwapchainCreateInfoKHR',
     ('old_swapchain', SwapchainKHR)
 )
 
+define_structure('ComponentMapping', ('r', c_uint), ('g', c_uint), ('b', c_uint), ('a', c_uint))
+
+define_structure('ImageSubresourceRange',
+    ('aspect_mask', c_uint), ('base_mip_level', c_uint), ('level_count', c_uint),
+    ('base_array_layer', c_uint), ('layer_count', c_uint)
+)
+
+define_structure('ImageViewCreateInfo', 
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('image', Image),
+    ('view_type', c_uint), ('format', c_uint), ('components', ComponentMapping),
+    ('subresource_range', ImageSubresourceRange) 
+)
+
+define_structure('ImageMemoryBarrier',
+    ('s_type', c_uint), ('next', c_void_p), ('src_access_mask', c_uint),
+    ('dst_access_mask', c_uint), ('old_layout', c_uint), ('new_layout', c_uint),
+    ('src_queue_family_index', c_uint), ('dst_queue_family_index', c_uint),
+    ('image', Image), ('subresource_range', ImageSubresourceRange)
+)
+
+define_structure('SubmitInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('wait_semaphore_count', c_uint),
+    ('wait_semaphores', POINTER(Semaphore)), ('wait_dst_stage_mask', c_uint),
+    ('command_buffer_count', c_uint), ('command_buffers', POINTER(CommandBuffer)),
+    ('signal_semaphore_count', c_uint), ('signal_semaphores', POINTER(Semaphore))
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -929,7 +974,13 @@ DEVICE_FUNCTIONS = (
     (b'vkEndCommandBuffer', c_uint, CommandBuffer),
     (b'vkCreateSwapchainKHR', c_uint, Device, POINTER(SwapchainCreateInfoKHR), c_void_p, POINTER(SwapchainKHR)),
     (b'vkDestroySwapchainKHR', None, Device, SwapchainKHR, c_void_p),
-
+    (b'vkGetSwapchainImagesKHR', c_uint, Device, SwapchainKHR, POINTER(c_uint), POINTER(c_uint)),
+    (b'vkCreateImageView', c_uint, Device, POINTER(ImageViewCreateInfo), c_void_p, POINTER(ImageView)),
+    (b'vkCmdPipelineBarrier', None, CommandBuffer, c_uint, c_uint, c_uint, c_uint, c_void_p, c_uint, c_void_p, c_uint, POINTER(ImageMemoryBarrier)),
+    (b'vkQueueSubmit', c_uint, Queue, c_uint, POINTER(SubmitInfo), Fence),
+    (b'vkQueueWaitIdle', c_uint, Queue),
+    (b'vkGetDeviceQueue', None, Device, c_uint, c_uint, POINTER(Queue)),
+    (b'vkFreeCommandBuffers', None, Device, CommandPool, c_uint, POINTER(CommandBuffer)),
 )
 
 def load_functions(owner, obj, functions_list, loader):

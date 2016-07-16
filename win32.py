@@ -5,7 +5,7 @@ import vk
 
 from ctypes import *
 from ctypes.wintypes import *
-import asyncio
+import asyncio, weakref
 
 ### BINDINGS ###
 
@@ -214,7 +214,7 @@ class WinSwapchain(object):
             Create a surface for the window
         """
         
-        app = self.app
+        app = self.app()
         surface = vk.SurfaceKHR(0)
         surface_info = vk.Win32SurfaceCreateInfoKHR(
             s_type = vk.STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
@@ -228,7 +228,10 @@ class WinSwapchain(object):
         else:
             raise RuntimeError("Failed to create surface")
 
-    def __init__(self):
+    def __init__(self, app):
+        self.app = weakref.ref(app)
         self.surface = None
+        self.swapchain = None
+        self.images = None
         self.create_surface()
         

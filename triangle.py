@@ -23,15 +23,10 @@ else:
 class Swapchain(BaseSwapchain):
 
     def __init__(self, app):
-        # Circular dependency is ok because its a demo. Otherwise I would have used weakref
-        self.app = app
-        self.swapchain = None
-        self.images = None
-
-        super().__init__()
+        super().__init__(app)
 
     def create(self):
-        app = self.app
+        app = self.app()
         
         # Get the physical device surface capabilities (properties and format)
         cap = vk.SurfaceCapabilitiesKHR()
@@ -111,23 +106,58 @@ class Swapchain(BaseSwapchain):
         result = app.CreateSwapchainKHR(app.device, byref(create_info), vk.NULL, byref(swapchain))
         if result == vk.SUCCESS:
             self.swapchain = swapchain
-            self.images = (vk.Image * swapchain_image_count )()
-            self.create_images()
+            self.create_images(swapchain_image_count, color_format)
         else:
             raise RuntimeError('Failed to create the swapchain')
         
-    def create_images(self):
-        pass
+    def create_images(self, image_count, color_format):
+        self.images = (vk.Image * image_count )()
+        app = self.app()
 
+        image_count = c_uint(image_count)
+        result = app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(c_uint)))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Failed to get the swapchain images')
+
+        for index, image in enumerate(self.images):
+
+            components = vk.ComponentMapping(
+                r=vk.COMPONENT_SWIZZLE_R, g=vk.COMPONENT_SWIZZLE_G,
+                b=vk.COMPONENT_SWIZZLE_B, a=vk.COMPONENT_SWIZZLE_A,
+            )
+
+            subresource_range = vk.ImageSubresourceRange(
+                aspect_mask=vk.IMAGE_ASPECT_COLOR_BIT, base_mip_level=0,
+                level_count=1, base_array_layer=1, layer_count=1,
+            )
+
+            view_create_info = vk.ImageViewCreateInfo(
+                s_type=vk.STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+                next=vk.NULL, flags=0, image=image,
+                view_type=vk.IMAGE_VIEW_TYPE_2D, format=color_format,
+                components=components, subresource_range=subresource_range
+            )
+
+            app.set_image_layout(
+                app.setup_buffer, image, 
+                vk.IMAGE_ASPECT_COLOR_BIT,
+                vk.IMAGE_LAYOUT_UNDEFINED,
+                vk.IMAGE_LAYOUT_PRESENT_SRC_KHR)
+
+            view = vk.ImageView(0)
+            result = app.CreateImageView(app.device, byref(view_create_info), vk.NULL, byref(view))
+            if result != vk.SUCCESS:
+                raise RuntimeError('Failed to create an image view.')
 
     def destroy_swapchain(self):
-        app = self.app
+        app = self.app()
         app.DestroySwapchainKHR(app.device, self.swapchain, vk.NULL)
 
     def destroy(self):
-        app = self.app
-        self.destroy_swapchain()
-        app.DestroySurfaceKHR(app.instance, self.surface, NULL)
+        app = self.app()
+        if self.swapchain is not None:
+            self.destroy_swapchain()
+        app.DestroySurfaceKHR(app.instance, self.surface, vk.NULL)
         
 
 
@@ -244,6 +274,15 @@ class Application(object):
         else:
             raise RuntimeError('Could not create device.')
 
+
+        # Get the queue that was created with the device
+        queue = vk.Queue(0)
+        self.GetDeviceQueue(device, self.main_queue_family, 0, byref(queue))
+        if queue.value != 0:
+            self.queue = queue
+        else:
+            raise RuntimeError("Could not get device queue")
+
     def create_swapchain(self):
         self.swapchain = Swapchain(self)
 
@@ -286,10 +325,87 @@ class Application(object):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
             raise RuntimeError('Failed to end setup command buffer')
 
+        submit_info = vk.SubmitInfo(
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
+            wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
+            wait_dst_stage_mask=0, command_buffer_count=1,
+            command_buffers=pointer(self.setup_buffer),
+            signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
+        )
+
+        # result = self.QueueSubmit(self.queue, 1, byref(submit_info), 0)
+        # if result != vk.SUCCESS:
+        #     raise RuntimeError("Setup buffer sumbit failed")
+        
+        # result = self.QueueWaitIdle(self.queue)
+        # if result != vk.SUCCESS:
+        #     raise RuntimeError("Setup execution failed")
+
+        self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
+        self.setup_buffer = None
+
+    def set_image_layout(self, cmd, image, aspect_mask, old_layout, new_layout, subres=None):
+        
+        if subres is None:
+            subres = vk.ImageSubresourceRange(
+                aspect_mask=aspect_mask, base_mip_level=0,
+                level_count=1, base_array_layer=1, layer_count=1,
+            )
+
+        barrier = vk.ImageMemoryBarrier(
+            s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL, 
+            old_layout=old_layout, new_layout=new_layout,
+            src_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+            dst_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+            image=image, subresource_range=subres
+        )
+
+        # Source layouts mapping (old)
+        old_map = {
+            vk.IMAGE_LAYOUT_PREINITIALIZED: vk.ACCESS_HOST_WRITE_BIT | vk.ACCESS_TRANSFER_WRITE_BIT,
+            vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: vk.ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+            vk.IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL: vk.ACCESS_TRANSFER_READ_BIT,
+            vk.IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: vk.ACCESS_SHADER_READ_BIT
+        }
+        if old_layout in old_map.values():
+            barrier.src_access_mask = old_map[old_layout]
+        else:
+            barrier.src_access_mask = 0
+
+        # Target layouts
+        if new_layout == vk.IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+            barrier.dst_access_mask = vk.ACCESS_TRANSFER_WRITE_BIT
+
+        elif new_layout == vk.IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+            barrier.src_access_mask |= vk.ACCESS_TRANSFER_READ_BIT
+            barrier.dst_access_mask = vk.ACCESS_TRANSFER_READ_BIT
+
+        elif new_layout == vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+            barrier.dst_access_mask = vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+            barrier.src_access_mask = vk.ACCESS_TRANSFER_READ_BIT
+
+        elif new_layout == vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+            barrier.dst_access_mask |= vk.ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+        
+        elif new_layout == vk.IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+            barrier.src_access_mask = vk.ACCESS_HOST_WRITE_BIT | vk.ACCESS_TRANSFER_WRITE_BIT
+            barrier.dst_access_mask = vk.ACCESS_SHADER_READ_BIT
+
+        self.CmdPipelineBarrier(
+            cmd,
+            vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+            0,
+            0,vk.NULL,
+            0,vk.NULL,
+            1, byref(barrier)
+        )
+
     def __init__(self):
         self.gpu = None
         self.instance = None
         self.device = None
+        self.queue = None
         self.swapchain = None
         self.cmd_pool = None
         self.setup_buffer = None
@@ -301,7 +417,7 @@ class Application(object):
         self.create_command_pool()
 
         self.create_setup_buffer()
-        self.swapchain.create()
+        #self.swapchain.create()
         self.flush_setup_buffer()
 
         self.window.show()
@@ -314,7 +430,7 @@ class Application(object):
             self.swapchain.destroy()
 
         if self.setup_buffer != None:
-            self.vkFreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
+            self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
 
         if self.cmd_pool:
             self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)
@@ -334,6 +450,7 @@ def main():
 
     loop = asyncio.get_event_loop()
     loop.run_forever()
+
 
 
 if __name__ == '__main__':
