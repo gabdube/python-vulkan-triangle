@@ -281,6 +281,10 @@ class Application(object):
         else:
             raise RuntimeError('Could not create device.')
 
+        
+        # Get the physical device memory properties.
+        self.gpu_mem = vk.PhysicalDeviceMemoryProperties()
+        self.GetPhysicalDeviceMemoryProperties(self.gpu, byref(self.gpu_mem))
 
         # Get the queue that was created with the device
         queue = vk.Queue(0)
@@ -410,9 +414,39 @@ class Application(object):
         depthstencil_image = vk.Image(0)
         result=self.CreateImage(self.device, byref(create_info), vk.NULL, byref(depthstencil_image))
         if result != vk.SUCCESS:
-            raise RuntimeError("Failed to create depth stencil image")
+            raise RuntimeError('Failed to create depth stencil image')
+
+        memreq = vk.MemoryRequirements()
+        self.GetImageMemoryRequirements(self.device, depthstencil_image, byref(memreq))
+        mem_alloc_info.allocation_size = memreq.size
+        mem_alloc_info.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
+        
+        depthstencil_mem = vk.DeviceMemory(0)
+        result = self.AllocateMemory(self.device, byref(mem_alloc_info), vk.NULL, byref(depthstencil_mem))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not allocate depth stencil image memory')
+
+        result = self.BindImageMemory(self.device, depthstencil_image, depthstencil_mem, 0)
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not bind the depth stencil memory to the image')
+            
+        self.set_image_layout(
+            self.setup_buffer, depthstencil_image,
+            vk.IMAGE_ASPECT_DEPTH_BIT | vk.IMAGE_ASPECT_STENCIL_BIT,
+            vk.IMAGE_LAYOUT_UNDEFINED,
+            vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        )
+
+        depthstencil_view = vk.ImageView(0)
+        create_view_info.image = depthstencil_image
+        result = self.CreateImageView(self.device, byref(create_view_info), vk.NULL, byref(depthstencil_view))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not create image view for depth stencil')
+            
 
         self.depth_stencil['image'] = depthstencil_image
+        self.depth_stencil['mem'] = depthstencil_mem
+        self.depth_stencil['view'] = depthstencil_view
 
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
@@ -495,8 +529,18 @@ class Application(object):
             1, byref(barrier)
         )
 
+    def get_memory_type(self, bits, properties):
+        for index, mem_t in enumerate(self.gpu_mem.memory_types):
+            if (bits & 1) == 1:
+                if mem_t.property_flags & properties == properties:
+                    return (True, index)
+            bits >>= 1
+
+        return (False, None)
+
     def __init__(self):
         self.gpu = None
+        self.gpu_mem = None
         self.instance = None
         self.device = None
         self.queue = None
@@ -525,28 +569,37 @@ class Application(object):
         if self.instance is None:
             return
 
-        if self.swapchain is not None:
-            self.swapchain.destroy()
+        dev = self.device
+        if dev is not None:
+            if self.swapchain is not None:
+                self.swapchain.destroy()
 
-        if self.setup_buffer is not None:
-            self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
+            if self.setup_buffer is not None:
+                self.FreeCommandBuffers(dev, self.cmd_pool, 1, byref(self.setup_buffer))
 
-        if self.present_buffers is not None:
-            len_draw_buffers = len(self.draw_buffers)
-            self.FreeCommandBuffers(self.device, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
-            self.FreeCommandBuffers(self.device, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
+            if self.present_buffers is not None:
+                len_draw_buffers = len(self.draw_buffers)
+                self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
+                self.FreeCommandBuffers(dev, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
 
-        if self.depth_stencil['image'] is not None:
-            self.DestroyImage(self.device, self.depth_stencil['image'], vk.NULL)
+            if self.depth_stencil['view'] is not None:
+                self.DestroyImageView(dev, self.depth_stencil['view'], vk.NULL)
 
-        if self.cmd_pool:
-            self.DestroyCommandPool(self.device, self.cmd_pool, vk.NULL)
+            if self.depth_stencil['image'] is not None:
+                self.DestroyImage(dev, self.depth_stencil['image'], vk.NULL)
 
-        if self.device is not None:
-            self.DestroyDevice(self.device, vk.NULL)
+            if self.depth_stencil['mem'] is not None:
+                self.FreeMemory(dev, self.depth_stencil['mem'], vk.NULL)
+            
+
+            if self.cmd_pool:
+                self.DestroyCommandPool(dev, self.cmd_pool, vk.NULL)
+
+        
+            self.DestroyDevice(dev, vk.NULL)
 
         self.DestroyInstance(self.instance, vk.NULL)
-        print("Application freed!")
+        print('Application freed!')
 
 def main():
     # I never execute my code in the global scope of the project to make sure

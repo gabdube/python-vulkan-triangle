@@ -953,8 +953,19 @@ define_structure('FormatProperties',
 )
 
 define_structure('MemoryAllocateInfo',
-    ('s_type', c_uint), ('next', c_void_p), ('allocation_size', c_size_t),
+    ('s_type', c_uint), ('next', c_void_p), ('allocation_size', c_ulonglong),
     ('memory_type_index', c_uint)
+)
+
+define_structure('MemoryRequirements', 
+    ('size', c_ulonglong), ('alignment', c_ulonglong), ('memory_type_bits', c_uint)
+)
+
+define_structure('MemoryType', ('property_flags', c_uint), ('heap_index', c_uint))
+define_structure('MemoryHeap', ('size', c_ulonglong), ('flags', c_uint))
+define_structure('PhysicalDeviceMemoryProperties',
+    ('memory_type_count', c_uint), ('memory_types', MemoryType*MAX_MEMORY_TYPES),
+    ('memory_heap_count', c_uint), ('memory_heaps', MemoryHeap*MAX_MEMORY_TYPES)
 )
 
 del mod
@@ -981,6 +992,7 @@ INSTANCE_FUNCTIONS = (
     (b'vkGetPhysicalDeviceSurfacePresentModesKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(c_uint)),
     (b'vkGetPhysicalDeviceSurfaceFormatsKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR)),
     (b'vkGetPhysicalDeviceFormatProperties', None, PhysicalDevice, c_uint, POINTER(FormatProperties)),
+    (b'vkGetPhysicalDeviceMemoryProperties', None, PhysicalDevice, POINTER(PhysicalDeviceMemoryProperties)),
 
 )
 
@@ -1003,6 +1015,10 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyImageView', None, Device, ImageView, c_void_p),
     (b'vkCreateImage', c_uint, Device, POINTER(ImageCreateInfo), c_void_p, POINTER(Image)),
     (b'vkDestroyImage', None, Device, Image, c_void_p),
+    (b'vkGetImageMemoryRequirements', None, Device, Image, POINTER(MemoryRequirements)),
+    (b'vkAllocateMemory', c_uint, Device, POINTER(MemoryAllocateInfo), c_void_p, POINTER(DeviceMemory)),
+    (b'vkBindImageMemory', c_uint, Device, DeviceMemory, c_ulonglong),
+    (b'vkFreeMemory', None, Device, DeviceMemory, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):
