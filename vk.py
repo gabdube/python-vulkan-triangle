@@ -968,6 +968,34 @@ define_structure('PhysicalDeviceMemoryProperties',
     ('memory_heap_count', c_uint), ('memory_heaps', MemoryHeap*MAX_MEMORY_TYPES)
 )
 
+define_structure('AttachmentDescription',
+    ('flags', c_uint), ('format', c_uint), ('samples', c_uint), ('load_op', c_uint),
+    ('store_op', c_uint), ('stencil_op', c_uint), ('stencil_load_op', c_uint),
+    ('stencil_store_op', c_uint), ('initial_layout', c_uint), ('final_layout', c_uint)
+)
+
+define_structure('AttachmentReference', ('attachment', c_uint), ('layout', c_uint))
+NULL_REF = cast(NULL, POINTER(AttachmentReference))
+
+define_structure('SubpassDescription',
+    ('flags', c_uint), ('pipeline_bind_point', c_uint), ('input_attachment_count', c_uint),
+    ('input_attachments', POINTER(AttachmentReference)), 
+    ('color_attachment_count', c_uint),
+    ('color_attachments', POINTER(AttachmentReference)),
+    ('resolve_attachments', POINTER(AttachmentReference)),
+    ('depth_stencil_attachment', POINTER(AttachmentReference)),
+    ('preserve_attachment_count', c_uint),
+    ('preserve_attachments', POINTER(c_uint))
+)
+
+define_structure('RenderPassCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('attachment_count', c_uint), ('attachments', POINTER(AttachmentDescription)),
+    ('subpass_count', c_uint), ('subpasses', POINTER(SubpassDescription)),
+    ('dependency_count', c_uint), ('dependencies', c_void_p)
+)
+
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -1019,6 +1047,8 @@ DEVICE_FUNCTIONS = (
     (b'vkAllocateMemory', c_uint, Device, POINTER(MemoryAllocateInfo), c_void_p, POINTER(DeviceMemory)),
     (b'vkBindImageMemory', c_uint, Device, DeviceMemory, c_ulonglong),
     (b'vkFreeMemory', None, Device, DeviceMemory, c_void_p),
+    (b'vkCreateRenderPass', c_uint, Device, POINTER(RenderPassCreateInfo), c_void_p, POINTER(RenderPass)),
+    (b'vkDestroyRenderPass', None, Device, RenderPass, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):

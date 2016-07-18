@@ -88,6 +88,7 @@ class Swapchain(BaseSwapchain):
             # Else select the first format
             color_format = formats[0].format
 
+        app.formats['color'] = color_format
         color_space = formats[0].color_space
 
         #Create the swapchain
@@ -443,10 +444,64 @@ class Application(object):
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create image view for depth stencil')
             
-
+        
+        self.formats['depth'] = depth_format
         self.depth_stencil['image'] = depthstencil_image
         self.depth_stencil['mem'] = depthstencil_mem
         self.depth_stencil['view'] = depthstencil_view
+
+    def create_renderpass(self):
+        attachments = (vk.AttachmentDescription*2)()
+        color, depth = attachments
+
+        #Color attachment
+        color.format = self.formats['color']
+        color.samples = vk.SAMPLE_COUNT_1_BIT
+        color.load_op = vk.ATTACHMENT_LOAD_OP_CLEAR
+        color.store_op = vk.ATTACHMENT_STORE_OP_STORE
+        color.stencil_load_op = vk.ATTACHMENT_LOAD_OP_DONT_CARE
+        color.stencil_store_op = vk.ATTACHMENT_STORE_OP_DONT_CARE
+        color.initial_layout = vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+        color.final_layout = vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+
+        #Depth attachment
+        depth.format = self.formats['depth']
+        depth.samples = vk.SAMPLE_COUNT_1_BIT
+        depth.load_op = vk.ATTACHMENT_LOAD_OP_CLEAR
+        depth.store_op = vk.ATTACHMENT_STORE_OP_STORE
+        depth.stencil_load_op = vk.ATTACHMENT_LOAD_OP_DONT_CARE
+        depth.stencil_store_op = vk.ATTACHMENT_STORE_OP_DONT_CARE
+        depth.initial_layout = vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+        depth.final_layout = vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+
+        color_ref = vk.AttachmentReference( attachment=0, layout=vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL )
+        depth_ref = vk.AttachmentReference( attachment=1, layout=vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL )
+
+        subpass = vk.SubpassDescription(
+            pipeline_bind_point = vk.PIPELINE_BIND_POINT_GRAPHICS,
+            flags = 0, input_attachment_count=0, input_attachments=vk.NULL_REF,
+            color_attachment_count=1, color_attachments=pointer(color_ref),
+            resolve_attachments=vk.NULL_REF, depth_stencil_attachment=pointer(depth_ref),
+            preserve_attachment_count=0, preserve_attachments=cast(vk.NULL, POINTER(c_uint))
+        )
+
+        create_info = vk.RenderPassCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+            next=vk.NULL, attachment_count=2,
+            attachments=cast(attachments, POINTER(vk.AttachmentDescription)),
+            subpass_count=1, subpasses=pointer(subpass), dependency_count=0,
+            dependencies=vk.NULL
+        )
+
+        renderpass = vk.RenderPass(0)
+        result = self.CreateRenderPass(self.device, byref(create_info), vk.NULL, byref(renderpass))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not create renderpass')
+
+        self.renderpass = renderpass
+
+    def create_pipeline_cache(self):
+        pass
 
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
@@ -549,7 +604,10 @@ class Application(object):
         self.setup_buffer = None
         self.draw_buffers = None
         self.present_buffers = None
+        self.renderpass = None
+        self.pipeline_cache = None
         self.depth_stencil = {'image':None, 'mem':None, 'view':None}
+        self.formats = {'color':None, 'depth':None}
         self.window = Window()
 
         self.create_instance()
@@ -561,6 +619,8 @@ class Application(object):
         self.swapchain.create()
         self.create_draw_buffers()
         self.create_depth_stencil()
+        self.create_renderpass()
+        self.create_pipeline_cache()
         self.flush_setup_buffer()
 
         self.window.show()
@@ -581,6 +641,9 @@ class Application(object):
                 len_draw_buffers = len(self.draw_buffers)
                 self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
                 self.FreeCommandBuffers(dev, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
+
+            if self.renderpass is not None:
+                self.DestroyRenderPass(self.device, self.renderpass, vk.NULL)
 
             if self.depth_stencil['view'] is not None:
                 self.DestroyImageView(dev, self.depth_stencil['view'], vk.NULL)
