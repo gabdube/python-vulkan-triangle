@@ -501,7 +501,40 @@ class Application(object):
         self.renderpass = renderpass
 
     def create_pipeline_cache(self):
-        pass
+        create_info = vk.PipelineCacheCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, next=vk.NULL,
+            flags=0, initial_data_size=0, initial_data=vk.NULL
+        )
+
+        pipeline_cache = vk.PipelineCache(0)
+        result = self.CreatePipelineCache(self.device, byref(create_info), vk.NULL, byref(pipeline_cache))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Failed to create pipeline cache')
+
+        self.pipeline_cache = pipeline_cache
+
+    def create_framebuffer(self):
+        attachments = (vk.ImageView*2)()
+        attachments[1] = self.depth_stencil['image']
+
+        width, height = self.window.dimensions()
+
+        create_info = vk.FramebufferCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+            next=vk.NULL, flags=0, render_pass=self.renderpass,
+            attachment_count=2, attachments=cast(attachments, POINTER(vk.ImageView)),
+            width=width, height=height, layers=1
+        )
+
+        self.framebuffers = (vk.Framebuffer*len(self.swapchain.images))()
+        for index, view in enumerate(self.swapchain.images):
+            fb = vk.Framebuffer(0)
+            attachments[0] = view
+            result = self.CreateFramebuffer(self.device, byref(create_info), vk.NULL, byref(fb))
+            if result != vk.SUCCESS:
+                raise RuntimeError('Could not create the framebuffers')
+            
+            
 
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
@@ -606,6 +639,7 @@ class Application(object):
         self.present_buffers = None
         self.renderpass = None
         self.pipeline_cache = None
+        self.framebuffers = None
         self.depth_stencil = {'image':None, 'mem':None, 'view':None}
         self.formats = {'color':None, 'depth':None}
         self.window = Window()
@@ -621,6 +655,7 @@ class Application(object):
         self.create_depth_stencil()
         self.create_renderpass()
         self.create_pipeline_cache()
+        self.create_framebuffer()
         self.flush_setup_buffer()
 
         self.window.show()
@@ -644,6 +679,10 @@ class Application(object):
 
             if self.renderpass is not None:
                 self.DestroyRenderPass(self.device, self.renderpass, vk.NULL)
+            
+            if self.framebuffers is not None:
+                for fb in self.framebuffers:
+                    self.DestroyFramebuffer(self.device, fb, vk.NULL)
 
             if self.depth_stencil['view'] is not None:
                 self.DestroyImageView(dev, self.depth_stencil['view'], vk.NULL)
@@ -654,6 +693,8 @@ class Application(object):
             if self.depth_stencil['mem'] is not None:
                 self.FreeMemory(dev, self.depth_stencil['mem'], vk.NULL)
             
+            if self.pipeline_cache:
+                self.DestroyPipelineCache(self.device, self.pipeline_cache, vk.NULL)
 
             if self.cmd_pool:
                 self.DestroyCommandPool(dev, self.cmd_pool, vk.NULL)
@@ -664,12 +705,18 @@ class Application(object):
         self.DestroyInstance(self.instance, vk.NULL)
         print('Application freed!')
 
+
+class TriangleApplication(Application):
+
+    def __init__(self):
+        Application.__init__(self)
+
 def main():
     # I never execute my code in the global scope of the project to make sure
     # that every ressources will be deallocated before the EOF is reached.
     # In this case "app" (and all the ressources associated) will be freed once
     # main return.
-    app = Application()
+    app = TriangleApplication()
 
     loop = asyncio.get_event_loop()
     loop.run_forever()

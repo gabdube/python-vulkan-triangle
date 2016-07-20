@@ -995,6 +995,17 @@ define_structure('RenderPassCreateInfo',
     ('dependency_count', c_uint), ('dependencies', c_void_p)
 )
 
+define_structure('PipelineCacheCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('initialDataSize', c_size_t),
+    ('initial_data', c_void_p)
+)
+
+define_structure('FramebufferCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('render_pass', RenderPass), ('attachment_count', c_uint),
+    ('attachments', POINTER(ImageView)), ('width', c_uint),
+    ('height', c_uint), ('layers', c_uint)
+)
 
 del mod
 
@@ -1049,6 +1060,10 @@ DEVICE_FUNCTIONS = (
     (b'vkFreeMemory', None, Device, DeviceMemory, c_void_p),
     (b'vkCreateRenderPass', c_uint, Device, POINTER(RenderPassCreateInfo), c_void_p, POINTER(RenderPass)),
     (b'vkDestroyRenderPass', None, Device, RenderPass, c_void_p),
+    (b'vkCreatePipelineCache', c_uint, Device, POINTER(PipelineCacheCreateInfo), c_void_p, POINTER(PipelineCache)),
+    (b'vkDestroyPipelineCache', None, Device, PipelineCache, c_void_p),
+    (b'vkCreateFramebuffer', c_uint, Device, POINTER(FramebufferCreateInfo), c_void_p, POINTER(Framebuffer)),
+    (b'vkDestroyFramebuffer', None, Framebuffer, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):
