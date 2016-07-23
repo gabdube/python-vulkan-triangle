@@ -1,7 +1,7 @@
 """
     Minimalistic vulkan triangle example powered by asyncio. The demo
-    should run on Windows and Linux. For more information see the readme 
-    of the project
+    was tested and should run on Windows and Linux. 
+    For more information see the readme of the project
 
     To run this demo call:  
     ``python triangle.py``
@@ -11,6 +11,7 @@
 
 import platform, asyncio, vk
 from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
+from xmath import *
 
 system_name = platform.system()
 if system_name == 'Windows':
@@ -22,6 +23,8 @@ else:
 
 class Vertex(Structure):
     _fields_ = (('pos', c_float*3), ('col', c_float*3))
+
+
 
 class Swapchain(BaseSwapchain):
 
@@ -629,6 +632,9 @@ class Application(object):
         return (False, None)
 
     def __init__(self):
+        self.zoom = 0.0
+        self.rotation = (c_float*3)()
+
         self.gpu = None
         self.gpu_mem = None
         self.instance = None
@@ -728,7 +734,30 @@ class TriangleApplication(Application):
         self.render_semaphores['render'] = render
 
     def describe_bindings(self):
-        pass
+        bindings = (vk.VertexInputBindingDescription*1)()
+        attributes = (vk.VertexInputAttributeDescription*2)()
+
+        bindings[0].binding = 0
+        bindings[0].stride = vk.sizeof(Vertex)
+        bindings[0].input_rate = vk.VERTEX_INPUT_RATE_VERTEX
+
+        # Attribute descriptions
+		# Describes memory layout and shader attribute locations
+
+        # Location 0: Position
+        attributes[0].binding = 0
+        attributes[0].location = 0
+        attributes[0].format = vk.FORMAT_R32G32B32_SFLOAT
+        attributes[0].offset = 0
+
+        # Location 1: Color
+        attributes[1].binding = 0
+        attributes[1].location = 1
+        attributes[1].format = vk.FORMAT_R32G32B32_SFLOAT
+        attributes[1].offset = vk.sizeof(c_float)*3
+
+        self.triangle['bindings'] = bindings
+        self.triangle['attributes'] = attributes
 
     def create_triangle(self):
         data = vk.c_void_p(0)
@@ -799,7 +828,7 @@ class TriangleApplication(Application):
         # 7 Allocate the buffer memory and bind the allocated memory to the buffer
         self.GetBufferMemoryRequirements(self.device, self.triangle['buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
-        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
         result = self.AllocateMemory(self.device, byref(memalloc), vk.NULL, self.triangle['memory'])
         if result != vk.SUCCESS:
             raise 'Could not allocate the triangle memory'
@@ -831,7 +860,7 @@ class TriangleApplication(Application):
         assert(self.CreateBuffer(self.device, byref(indices_info), vk.NULL, self.triangle['indices_buffer']) == vk.SUCCESS)
         self.GetBufferMemoryRequirements(self.device, self.triangle['indices_buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
-        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
         assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(self.triangle['indices_memory']))==vk.SUCCESS)
         assert(self.BindBufferMemory(self.device, self.triangle['indices_buffer'], self.triangle['indices_memory'], 0) ==vk.SUCCESS)
        
@@ -895,30 +924,102 @@ class TriangleApplication(Application):
 
         self.describe_bindings()
 
+    def create_uniform_buffers(self):
+        memreq = vk.MemoryRequirements()
+
+        # Vertex shader uniform buffer block
+        buffer_info = vk.BufferCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=vk.NULL,
+            flags=0, size=vk.sizeof(Mat4)*3, usage=vk.BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            sharing_mode=0, queue_family_index_count=0, queue_family_indices=vk.NULL_CUINT_PTR
+        )
+
+        alloc_info = vk.MemoryAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            allocation_size=0, memory_type_index=0
+        )
+
+        result = self.CreateBuffer(self.device, byref(buffer_info), vk.NULL, self.uniform_data['buffer'])
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not create the uniform buffer')
+
+        self.GetBufferMemoryRequirements(self.device, self.uniform_data['buffer'], byref(memreq))
+        alloc_info.allocation_size = memreq.size
+        alloc_info.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+
+        result = self.AllocateMemory(self.device, byref(alloc_info), vk.NULL, byref(self.uniform_data['memory']))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Failed to allocate the uniform buffer memory')
+
+        result = self.BindBufferMemory(self.device, self.uniform_data['buffer'], self.uniform_data['memory'], 0)
+        if result != vk.SUCCESS:
+            raise RuntimeError('Failed to bind the uniform buffer memory')
+
+        # Store information in the uniform's descriptor
+        self.uniform_data['descriptor'].buffer = self.uniform_data['buffer']
+        self.uniform_data['descriptor'].offset = 0
+        self.uniform_data['descriptor'].range = vk.sizeof(self.matrices)
+
+        self.update_uniform_buffers()
+
+    def update_uniform_buffers(self):
+        data = vk.c_void_p(0)
+        matsize = vk.sizeof(Mat4)*3
+
+        # Projection 
+        width, height = self.window.dimensions()
+        self.matrices[0].set_data(perspective(60.0, width/height, 0.1, 256.0))
+
+        # View
+        self.matrices[1].set_data(translate(None, (0.0, 0.0, self.zoom)))
+
+        # Model
+        mod_mat = rotate(None, self.rotation[0], (1.0, 0.0, 0.0))
+        mod_mat = rotate(mod_mat, self.rotation[1], (0.0, 1.0, 0.0))
+        self.matrices[2].set_data(rotate(mod_mat, self.rotation[2], (0.0, 0.0, 1.0)))
+
+        self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
+        vk.memmove(self.matrices, data, matsize)
+        self.UnmapMemory(self.device, self.uniform_data['memory'])
+      
     def __init__(self):
         Application.__init__(self)
 
         self.render_semaphores = {'present': None, 'render': None}
+        self.matrices = (Mat4*3)(Mat4(), Mat4(), Mat4()) # 0: Projection, 1: Model, 2: View
+        self.uniform_data = {
+            'buffer': vk.Buffer(0),
+            'memory': vk.DeviceMemory(0),
+            'descriptor': vk.DescriptorBufferInfo()
+        }
         self.triangle = {
             'buffer': vk.Buffer(0),
             'memory': vk.DeviceMemory(0),
             'indices_buffer': vk.Buffer(0),
-            'indices_memory': vk.DeviceMemory(0)
+            'indices_memory': vk.DeviceMemory(0),
+            'bindings': None,
+            'attributes': None
         }
 
         self.create_semaphores()
         self.create_triangle()
-         
+        self.create_uniform_buffers()
 
     def __del__(self):
 
-        if self.render_semaphores['present']:
+        if self.render_semaphores['present'] is not None:
 
-            self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
-            self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
+            if self.triangle['buffer'].value != 0:
+                self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
+                self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
 
-            self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
-            self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+            if self.triangle['indices_buffer'].value != 0:
+                self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
+                self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+
+            if self.uniform_data['buffer'] != 0:
+                self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
+                self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
 
             self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
             self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
@@ -926,10 +1027,6 @@ class TriangleApplication(Application):
         Application.__del__(self)
 
 def main():
-    # I never execute my code in the global scope of the project to make sure
-    # that every ressources will be deallocated before the EOF is reached.
-    # In this case "app" (and all the ressources associated) will be freed once
-    # main return.
     app = TriangleApplication()
 
     loop = asyncio.get_event_loop()

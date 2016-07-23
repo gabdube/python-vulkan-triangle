@@ -1022,6 +1022,18 @@ define_structure('BufferCopy',
     ('src_offset', c_ulonglong), ('dst_offset', c_ulonglong), ('size', c_ulonglong)
 )
 
+define_structure('VertexInputBindingDescription',
+    ('binding', c_uint), ('sride', c_uint), ('input_date', c_uint)
+)
+
+define_structure('VertexInputAttributeDescription',
+    ('location', c_uint), ('binding', c_uint), ('format', c_uint), ('offset', c_uint)
+)
+
+define_structure('DescriptorBufferInfo',
+    ('buffer', Buffer), ('offset', c_ulonglong), ('range', c_ulonglong)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
