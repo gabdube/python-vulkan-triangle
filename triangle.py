@@ -10,7 +10,7 @@
 """
 
 import platform, asyncio, vk
-from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float
+from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
 
 system_name = platform.system()
 if system_name == 'Windows':
@@ -19,6 +19,9 @@ elif system_name == 'Linux':
     from xlib import XlibWindow as Window, XlibSwapchain as BaseSwapchain
 else:
     raise OSError("Platform not supported")
+
+class Vertex(Structure):
+    _fields_ = (('pos', c_float*3), ('col', c_float*3))
 
 class Swapchain(BaseSwapchain):
 
@@ -543,8 +546,7 @@ class Application(object):
         submit_info = vk.SubmitInfo(
             s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
             wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
-            wait_dst_stage_mask=cast(vk.NULL, POINTER(c_uint)),
-            command_buffer_count=1,
+            wait_dst_stage_mask=vk.NULL_CUINT_PTR, command_buffer_count=1,
             command_buffers=pointer(self.setup_buffer),
             signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
         )
@@ -708,8 +710,220 @@ class Application(object):
 
 class TriangleApplication(Application):
 
+    def create_semaphores(self):
+        create_info = vk.SemaphoreCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+            next=vk.NULL, flags=0
+        )
+
+        present = vk.Semaphore(0)
+        render = vk.Semaphore(0)
+
+        result1 = self.CreateSemaphore(self.device, byref(create_info), vk.NULL, byref(present))
+        result2 = self.CreateSemaphore(self.device, byref(create_info), vk.NULL, byref(render))
+        if vk.SUCCESS not in (result1, result2):
+            raise RuntimeError('Failed to create the semaphores')
+
+        self.render_semaphores['present'] = present
+        self.render_semaphores['render'] = render
+
+    def describe_bindings(self):
+        pass
+
+    def create_triangle(self):
+        data = vk.c_void_p(0)
+        memreq = vk.MemoryRequirements()
+        memalloc = vk.MemoryAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            allocation_size=0, memory_type_index=0
+        )
+
+        # Setup vertices
+        vertices_data = (Vertex*3)(
+            Vertex(pos=(1.0, 1.0, 0.0), col=(1.0, 0.0,0.0)),
+            Vertex(pos=(-1.0, 1.0, 0.0), col=(0.0, 1.0,0.0)),
+            Vertex(pos=(0.0, -1.0, 0.0), col=(0.0, 0.0,1.0)),
+        )
+
+        vertices_size = vk.sizeof(Vertex)*3
+
+        # Setup indices
+        indices_data = (c_uint*3)(0,1,2)
+        indices_size = vk.sizeof(c_uint)*3
+
+        #
+        # Store the vertices in the device memory
+        #
+
+        # 1 Create a staging buffer
+        vertex = {'buffer': vk.Buffer(0), 'memory': vk.DeviceMemory(0)}
+        indices = {'buffer': vk.Buffer(0), 'memory': vk.DeviceMemory(0)}
+
+        # 2 Create the vertex buffer
+        vertex_info = vk.BufferCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=vk.NULL,
+            flags=0, size=vertices_size, usage=vk.BUFFER_USAGE_TRANSFER_SRC_BIT,
+            sharing_mode=0, queue_family_index_count=0, queue_family_indices=vk.NULL_CUINT_PTR
+        )
+
+        result = self.CreateBuffer(self.device, byref(vertex_info), vk.NULL, byref(vertex['buffer']))
+        if result != vk.SUCCESS:
+            raise 'Could not create a buffer'
+
+        # 3 Allocate memory for the vertex buffer
+        self.GetBufferMemoryRequirements(self.device, vertex['buffer'], byref(memreq))
+        memalloc.allocation_size = memreq.size
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        result = self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(vertex['memory']))
+        if result != vk.SUCCESS:
+            raise 'Could not allocate buffer memory'
+
+        # 4  Map the buffer memory and write the data
+        result = self.MapMemory(self.device, vertex['memory'], 0, memalloc.allocation_size, 0, byref(data))
+        if result != vk.SUCCESS:
+            raise 'Could not map memory to local'
+        vk.memmove(vertices_data, data, vertices_size)
+        self.UnmapMemory(self.device, vertex['memory'])
+
+        # 5 Bind the memory and the buffer together
+        result = self.BindBufferMemory(self.device, vertex['buffer'], vertex['memory'], 0)
+        if result != vk.SUCCESS:
+            raise 'Could not bind buffer memory'
+
+        # 6 Create a destination buffer with device only visibility and allocate its memory
+        vertex_info.usage = vk.BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.BUFFER_USAGE_TRANSFER_DST_BIT
+        result = self.CreateBuffer(self.device, byref(vertex_info), vk.NULL, byref(self.triangle['buffer']))
+        if result != vk.SUCCESS:
+            raise 'Could not create triangle buffer'
+
+        # 7 Allocate the buffer memory and bind the allocated memory to the buffer
+        self.GetBufferMemoryRequirements(self.device, self.triangle['buffer'], byref(memreq))
+        memalloc.allocation_size = memreq.size
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        result = self.AllocateMemory(self.device, byref(memalloc), vk.NULL, self.triangle['memory'])
+        if result != vk.SUCCESS:
+            raise 'Could not allocate the triangle memory'
+        result = self.BindBufferMemory(self.device, self.triangle['buffer'], self.triangle['memory'], 0)
+        if result != vk.SUCCESS:
+            raise 'Could not bind the triangle memory'
+
+        #
+        # Store the indices in the device memory
+        #
+
+        # Same steps as 1,2,3,4,5
+        indices_info = vertex_info
+        indices_info.size = indices_size
+        indices_info.usage = vk.BUFFER_USAGE_TRANSFER_SRC_BIT
+
+        assert(self.CreateBuffer(self.device, byref(indices_info), vk.NULL, byref(indices['buffer'])) == vk.SUCCESS)
+        self.GetBufferMemoryRequirements(self.device, indices['buffer'], byref(memreq))
+        memalloc.allocation_size = memreq.size
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(indices['memory'])) == vk.SUCCESS)
+        assert(self.MapMemory(self.device, indices['memory'], 0, indices_size, 0, byref(data)) == vk.SUCCESS)
+        vk.memmove(vertices_data, data, vertices_size)
+        self.UnmapMemory(self.device, vertex['memory'])
+        assert(self.BindBufferMemory(self.device, indices['buffer'], indices['memory'], 0) == vk.SUCCESS)
+        
+        # Same steps as 5, 7 (with the exception for the usage flags)
+        indices_info.usage =  vk.BUFFER_USAGE_INDEX_BUFFER_BIT | vk.BUFFER_USAGE_TRANSFER_DST_BIT
+        assert(self.CreateBuffer(self.device, byref(indices_info), vk.NULL, self.triangle['indices_buffer']) == vk.SUCCESS)
+        self.GetBufferMemoryRequirements(self.device, self.triangle['indices_buffer'], byref(memreq))
+        memalloc.allocation_size = memreq.size
+        memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
+        assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(self.triangle['indices_memory']))==vk.SUCCESS)
+        assert(self.BindBufferMemory(self.device, self.triangle['indices_buffer'], self.triangle['indices_memory'], 0) ==vk.SUCCESS)
+       
+        # Copy the staging buffer memory into the final buffers
+        cmd_info = vk.CommandBufferAllocateInfo(
+            s_type = vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            command_pool=self.cmd_pool,
+            level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
+            command_buffer_count=1
+        )
+        begin_info = vk.CommandBufferBeginInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=vk.NULL,
+            flags=0, inheritance_info=vk.NULL
+        )
+        copy_region = vk.BufferCopy(src_offset=0, dst_offset=0, size=0)
+        copy_command = vk.CommandBuffer(0)
+
+        assert(self.AllocateCommandBuffers(self.device, byref(cmd_info), byref(copy_command)) == vk.SUCCESS)
+        assert(self.BeginCommandBuffer(copy_command, byref(begin_info)) == vk.SUCCESS)
+        
+        #Vertex Buffer
+        copy_region.size = vertices_size
+        self.CmdCopyBuffer(
+            copy_command, vertex['buffer'],
+            self.triangle['buffer'],
+            1,
+            byref(copy_region)
+        )
+
+        #Index Buffer
+        copy_region.size = indices_size
+        self.CmdCopyBuffer(
+            copy_command, indices['buffer'],
+            self.triangle['indices_buffer'],
+            1,
+            byref(copy_region)
+        )
+
+        assert(self.EndCommandBuffer(copy_command) == vk.SUCCESS)
+
+        # Submit commands to the queue
+        submit_info = vk.SubmitInfo(
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
+            wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
+            wait_dst_stage_mask=vk.NULL_CUINT_PTR, command_buffer_count=1,
+            command_buffers=pointer(copy_command),
+            signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
+        )
+
+        assert(self.QueueSubmit(self.queue, 1, byref(submit_info), 0)==vk.SUCCESS)
+        assert(self.QueueWaitIdle(self.queue)==vk.SUCCESS)
+
+        # Free temporary ressources
+        self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(copy_command))
+
+        self.DestroyBuffer(self.device, vertex['buffer'], vk.NULL)
+        self.FreeMemory(self.device, vertex['memory'], vk.NULL)
+
+        self.DestroyBuffer(self.device, indices['buffer'], vk.NULL)
+        self.FreeMemory(self.device, indices['memory'], vk.NULL)
+
+        self.describe_bindings()
+
     def __init__(self):
         Application.__init__(self)
+
+        self.render_semaphores = {'present': None, 'render': None}
+        self.triangle = {
+            'buffer': vk.Buffer(0),
+            'memory': vk.DeviceMemory(0),
+            'indices_buffer': vk.Buffer(0),
+            'indices_memory': vk.DeviceMemory(0)
+        }
+
+        self.create_semaphores()
+        self.create_triangle()
+         
+
+    def __del__(self):
+
+        if self.render_semaphores['present']:
+
+            self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
+            self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
+
+            self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
+            self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+
+            self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
+            self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
+
+        Application.__del__(self)
 
 def main():
     # I never execute my code in the global scope of the project to make sure

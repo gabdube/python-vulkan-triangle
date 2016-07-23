@@ -12,6 +12,7 @@ NULL = c_void_p(0)
 NULL_LAYERS = cast(NULL, POINTER(c_char_p))
 NULL_HANDLE = c_size_t(0)
 NULL_HANDLE_PTR = cast(NULL, POINTER(c_size_t) )
+NULL_CUINT_PTR = cast(NULL, POINTER(c_uint) )
 
 ### HANDLES ###
 
@@ -1007,6 +1008,20 @@ define_structure('FramebufferCreateInfo',
     ('height', c_uint), ('layers', c_uint)
 )
 
+define_structure('SemaphoreCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint)
+)
+
+define_structure('BufferCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('size', c_ulonglong),
+    ('usage', c_uint), ('sharing_mode', c_uint), ('queue_family_index_count', c_uint),
+    ('queue_family_indices', POINTER(c_uint))
+)
+
+define_structure('BufferCopy',
+    ('src_offset', c_ulonglong), ('dst_offset', c_ulonglong), ('size', c_ulonglong)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -1064,6 +1079,16 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyPipelineCache', None, Device, PipelineCache, c_void_p),
     (b'vkCreateFramebuffer', c_uint, Device, POINTER(FramebufferCreateInfo), c_void_p, POINTER(Framebuffer)),
     (b'vkDestroyFramebuffer', None, Framebuffer, c_void_p),
+    (b'vkCreateSemaphore', c_uint, Device, POINTER(SemaphoreCreateInfo), c_void_p, POINTER(Semaphore)),
+    (b'vkDestroySemaphore', None, Device, Semaphore, c_void_p),
+    (b'vkCreateBuffer', c_uint, Device, POINTER(BufferCreateInfo), c_void_p, POINTER(Buffer)),
+    (b'vkDestroyBuffer', None, Device, Buffer, c_void_p),
+    (b'vkMapMemory', c_uint, Device, DeviceMemory, c_ulonglong, c_ulonglong, c_uint, POINTER(c_void_p)),
+    (b'vkUnmapMemory', None, Device, DeviceMemory),
+    (b'vkBindBufferMemory', c_uint, Device, Buffer, DeviceMemory, c_ulonglong),
+    (b'vkGetBufferMemoryRequirements', None, Device, Buffer, POINTER(MemoryRequirements)),
+    (b'vkCmdCopyBuffer', None, CommandBuffer, Buffer, Buffer, c_uint, POINTER(BufferCopy)),
+    
 )
 
 def load_functions(owner, obj, functions_list, loader):
