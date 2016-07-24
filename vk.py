@@ -1118,7 +1118,7 @@ define_structure('PipelineMultisampleStateCreateInfo',
 
 define_structure('PipelineShaderStageCreateInfo',
     ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
-    ('stage', c_uint), ('module', c_void_p), ('name', c_char_p),
+    ('stage', c_uint), ('module', ShaderModule), ('name', c_char_p),
     ('specialization_info', c_void_p)
 )
 
@@ -1128,6 +1128,11 @@ define_structure('PipelineVertexInputStateCreateInfo',
     ('vertex_binding_descriptions', POINTER(VertexInputBindingDescription)),
     ('vertex_attribute_description_count', c_uint),
     ('vertex_attribute_descriptions', POINTER(VertexInputAttributeDescription))
+)
+
+define_structure('ShaderModuleCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('code_size', c_size_t), ('code', POINTER(c_uint))
 )
 
 define_structure('GraphicsPipelineCreateInfo',
@@ -1216,7 +1221,8 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyDescriptorSetLayout', None, Device, DescriptorSetLayout, c_void_p),
     (b'vkCreatePipelineLayout', c_uint, Device, POINTER(PipelineLayoutCreateInfo), c_void_p, POINTER(PipelineLayout)),
     (b'vkDestroyPipelineLayout', None, Device, PipelineLayout, c_void_p),
-
+    (b'vkCreateShaderModule', c_uint, Device, POINTER(ShaderModuleCreateInfo), c_void_p, POINTER(ShaderModule)),
+    (b'vkDestroyShaderModule', None, Device, ShaderModule, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):

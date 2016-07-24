@@ -12,6 +12,7 @@
 import platform, asyncio, vk
 from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
 from xmath import *
+from os.path import dirname
 
 system_name = platform.system()
 if system_name == 'Windows':
@@ -631,9 +632,41 @@ class Application(object):
 
         return (False, None)
 
+    def load_shader(self, name, stage):
+        shader_name = (name.split('.')[0]).encode()
+        
+        # Read the shader data
+        path = '{}/shaders/{}'.format(dirname(__file__), name)
+        shader_f = open(path, 'rb')
+        shader_bin = shader_f.read()
+        shader_bin_size = len(shader_bin)
+        shader_bin = (vk.c_ubyte*shader_bin_size)(*shader_bin)
+        shader_f.close()
+
+        # Compile the shader
+        module = vk.ShaderModule(0)
+        module_create_info = vk.ShaderModuleCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, next=vk.NULL,
+            code_size=len(shader_bin), code=cast(shader_bin, POINTER(c_uint))
+        )
+
+        result = self.CreateShaderModule(self.device, byref(module_create_info), vk.NULL, byref(module))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not compile shader at {}'.format(path))
+
+        shader_info = vk.PipelineShaderStageCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, next=vk.NULL,
+            flags=0, stage=stage, module=module, name=shader_name,
+            specialization_info=vk.NULL
+        )
+
+        self.shaders_modules.append(module)
+        return shader_info
+
     def __init__(self):
-        self.zoom = 0.0
-        self.rotation = (c_float*3)()
+        self.zoom = 0.0                # Scene zoom
+        self.rotation = (c_float*3)()  # Scene rotation
+        self.shaders_modules = []      # A list of compiled shaders. GC'ed with the application
 
         self.gpu = None
         self.gpu_mem = None
@@ -687,6 +720,9 @@ class Application(object):
 
             if self.render_pass is not None:
                 self.DestroyRenderPass(self.device, self.render_pass, vk.NULL)
+
+            for mod in self.shaders_modules:
+                self.DestroyShaderModule(self.device, mod, vk.NULL)
             
             if self.framebuffers is not None:
                 for fb in self.framebuffers:
@@ -1088,7 +1124,10 @@ class TriangleApplication(Application):
 
         # Load shaders
 		# Shaders are loaded from the SPIR-V format, which can be generated from glsl
-        shader_stages = (vk.PipelineShaderStageCreateInfo * 2)()
+        shader_stages = (vk.PipelineShaderStageCreateInfo * 2)(
+            self.load_shader('triangle.vert.spv', vk.SHADER_STAGE_VERTEX_BIT),
+            self.load_shader('triangle.frag.spv', vk.SHADER_STAGE_FRAGMENT_BIT)
+        )
 
         create_info = vk.GraphicsPipelineCreateInfo(
             s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=vk.NULL,
@@ -1123,6 +1162,8 @@ class TriangleApplication(Application):
         self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
         vk.memmove(self.matrices, data, matsize)
         self.UnmapMemory(self.device, self.uniform_data['memory'])
+
+    
 
     def __init__(self):
         Application.__init__(self)
