@@ -1,7 +1,8 @@
 """
     Minimalistic vulkan triangle example powered by asyncio. The demo
     was tested and should run on Windows and Linux. 
-    For more information see the readme of the project
+    For more information see the readme of the project.
+    This is (kind of) a port of https://github.com/SaschaWillems/Vulkan
 
     To run this demo call:  
     ``python triangle.py``
@@ -9,7 +10,7 @@
     @author: Gabriel Dubé
 """
 
-import platform, asyncio, vk
+import platform, asyncio, vk, weakref
 from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
 from xmath import *
 from os.path import dirname
@@ -22,10 +23,50 @@ elif system_name == 'Linux':
 else:
     raise OSError("Platform not supported")
 
+# Whether to enable validation layer or not
+ENABLE_VALIDATION = True
+
 class Vertex(Structure):
     _fields_ = (('pos', c_float*3), ('col', c_float*3))
 
+class Debugger(object):
 
+    def __init__(self, app):
+        self.app = weakref.ref(app)
+        self.callback_fn=None
+        self.debug_report_callback = None
+
+    @staticmethod
+    def print_message(flags, object_type, object, location, message_code, layer, message, user_data):
+        print(message[::].decode())
+        return 0
+
+    def start(self):
+        app = self.app()
+        if app is None:
+            raise RuntimeError('Application was freed')
+
+        callback_fn = vk.fn_DebugReportCallbackEXT(Debugger.print_message)
+        create_info = vk.DebugReportCallbackCreateInfoEXT(
+            s_type=vk.STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
+            next=vk.NULL, 
+            flags=vk.DEBUG_REPORT_ERROR_BIT_EXT | vk.DEBUG_REPORT_WARNING_BIT_EXT | vk.DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+            callback=callback_fn,
+            user_data=vk.NULL
+        )
+
+        debug_report_callback = vk.DebugReportCallbackEXT(0)
+        result = app.CreateDebugReportCallbackEXT(app.instance, byref(create_info), vk.NULL, byref(debug_report_callback))
+
+        self.callback_fn = callback_fn
+        self.debug_report_callback = debug_report_callback
+
+    def stop(self):
+        app = self.app()
+        if app is None:
+            raise RuntimeError('Application was freed')
+
+        app.DestroyDebugReportCallbackEXT(app.instance, self.debug_report_callback, vk.NULL)
 
 class Swapchain(BaseSwapchain):
 
@@ -189,17 +230,30 @@ class Application(object):
         )
 
         if system_name == 'Windows':
-            extensions = (b'VK_KHR_surface', b'VK_KHR_win32_surface')
+            extensions = [b'VK_KHR_surface', b'VK_KHR_win32_surface']
         else:
-            extensions = (b'VK_KHR_surface', b'VK_KHR_xcb_surface')
+            extensions = [b'VK_KHR_surface', b'VK_KHR_xcb_surface']
+
+        if ENABLE_VALIDATION:
+            extensions.append(b'VK_EXT_debug_report')
+            layer_count = 1
+            layer_names = [c_char_p(b'VK_LAYER_LUNARG_standard_validation')]
+            _layer_names = cast((c_char_p*1)(*layer_names), POINTER(c_char_p))
+        else:
+            layer_count = 0
+            _layer_names = vk.NULL_LAYERS
 
         extensions = [c_char_p(x) for x in extensions]
         _extensions = cast((c_char_p*len(extensions))(*extensions), POINTER(c_char_p))
 
         create_info = vk.InstanceCreateInfo(
             s_type=vk.STRUCTURE_TYPE_INSTANCE_CREATE_INFO, next=vk.NULL, flags=0,
-            application_info=pointer(app_info), enabled_layer_count=0,
-            enabled_layer_names=vk.NULL_LAYERS, enabled_extension_count=len(extensions),
+            application_info=pointer(app_info), 
+
+            enabled_layer_count=layer_count,
+            enabled_layer_names=_layer_names,
+
+            enabled_extension_count=len(extensions),
             enabled_extension_names=_extensions
         )
 
@@ -208,6 +262,11 @@ class Application(object):
         if result == vk.SUCCESS:
             vk.load_instance_functions(self, instance)
             self.instance = instance
+
+            # Start logging errors if validation is enabled
+            if ENABLE_VALIDATION:
+                self.debugger.start()
+
         else:
             raise RuntimeError('Instance creation failed. Error code: {}'.format(result))
 
@@ -273,11 +332,24 @@ class Application(object):
         extensions = (b'VK_KHR_swapchain',)
         _extensions = cast((c_char_p*len(extensions))(*extensions), POINTER(c_char_p))
         
+        if ENABLE_VALIDATION:
+            layer_count = 1
+            layer_names = (b'VK_LAYER_LUNARG_standard_validation',)
+            _layer_names = cast((c_char_p*1)(*layer_names), POINTER(c_char_p))
+        else:
+            layer_count=0
+            _layer_names=vk.NULL_LAYERS
+
         create_info = vk.DeviceCreateInfo(
             s_type=vk.STRUCTURE_TYPE_DEVICE_CREATE_INFO, next=vk.NULL, flags=0,
             queue_create_info_count=1, queue_create_infos=queue_create_infos,
-            enabled_layer_count=0, enabled_layer_names=vk.NULL_LAYERS,
-            enabled_extension_count=1, enabled_extension_names=_extensions,
+            
+            enabled_layer_count=layer_count, 
+            enabled_layer_names=_layer_names,
+
+            enabled_extension_count=1,
+            enabled_extension_names=_extensions,
+
             enabled_features=vk.NULL
         )
 
@@ -287,6 +359,7 @@ class Application(object):
             vk.load_device_functions(self, device, self.GetDeviceProcAddr)
             self.device = device
         else:
+            print(vk.c_int(result))
             raise RuntimeError('Could not create device.')
 
         
@@ -667,7 +740,9 @@ class Application(object):
         self.zoom = 0.0                # Scene zoom
         self.rotation = (c_float*3)()  # Scene rotation
         self.shaders_modules = []      # A list of compiled shaders. GC'ed with the application
+        self.debugger = Debugger(self) # Throw errors if validations layers are activated
 
+        # Vulkan objets
         self.gpu = None
         self.gpu_mem = None
         self.instance = None
@@ -685,6 +760,7 @@ class Application(object):
         self.formats = {'color':None, 'depth':None}
         self.window = Window()
 
+        # Vulkan objets initialization
         self.create_instance()
         self.create_swapchain()
         self.create_device()
@@ -698,6 +774,7 @@ class Application(object):
         self.create_pipeline_cache()
         self.create_framebuffer()
         self.flush_setup_buffer()
+
 
         self.window.show()
 
@@ -745,6 +822,9 @@ class Application(object):
 
         
             self.DestroyDevice(dev, vk.NULL)
+
+        if ENABLE_VALIDATION:
+            self.debugger.stop()
 
         self.DestroyInstance(self.instance, vk.NULL)
         print('Application freed!')
@@ -1045,8 +1125,8 @@ class TriangleApplication(Application):
         # Vertex input state
         input_state = vk.PipelineVertexInputStateCreateInfo(
             s_type=vk.STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, next=vk.NULL, flags=0,
-            vertex_binding_description_count = len(tri['bindings']),
-            vertex_attribute_description_count = len(tri['attributes']),
+            vertex_binding_description_count = 1,
+            vertex_attribute_description_count = 2,
             vertex_binding_descriptions = cast(tri['bindings'], POINTER(vk.VertexInputBindingDescription)),
             vertex_attribute_descriptions = cast(tri['attributes'], POINTER(vk.VertexInputAttributeDescription))
         )
@@ -1129,19 +1209,36 @@ class TriangleApplication(Application):
             self.load_shader('triangle.frag.spv', vk.SHADER_STAGE_FRAGMENT_BIT)
         )
 
+        tesselation_info = vk.PipelineTessellationStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, next=vk.NULL, flags=0,
+            path_control_points=0
+        )
+
         create_info = vk.GraphicsPipelineCreateInfo(
             s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=vk.NULL,
-            flags=0, layout=self.pipeline_layout, render_pass=self.render_pass, stage_count=2, 
+            flags=0, stage_count=2, 
             stages=cast(shader_stages, POINTER(vk.PipelineShaderStageCreateInfo)),
             vertex_input_state=pointer(input_state),
             input_assembly_state=pointer(input_assembly_state),
-            rasterization_state=pointer(raster_state),
-            color_blend_state=pointer(color_blend_state),
-            multisample_state=pointer(multisample_state),
+            tessellation_state=vk.NULL,
             viewport_state=pointer(viewport_state),
+            rasterization_state=pointer(raster_state),
+            multisample_state=pointer(multisample_state),
             depth_stencil_state=pointer(depth_stencil_state),
-            tessellation_state=vk.NULL
+            color_blend_state=pointer(color_blend_state),
+            layout=self.pipeline_layout,
+            render_pass=self.render_pass,
+            subpass=0,
+            basePipelineHandle=vk.Pipeline(0),
+            basePipelineIndex=0
         )
+
+        pipeline = vk.Pipeline(0)
+        # result = self.CreateGraphicsPipelines(self.device, self.pipeline_cache, 1, byref(create_info), vk.NULL, byref(pipeline))
+        # if result != vk.SUCCESS:
+        #     raise RuntimeError('Failed to create the graphics pipeline')
+        #
+        #self.pipeline = pipeline
 
     def update_uniform_buffers(self):
         data = vk.c_void_p(0)
@@ -1169,6 +1266,7 @@ class TriangleApplication(Application):
         Application.__init__(self)
 
         self.pipeline_layout = None
+        self.pipeline = None
         self.descriptor_set_layout = None
         self.render_semaphores = {'present': None, 'render': None}
         self.matrices = (Mat4*3)(Mat4(), Mat4(), Mat4()) # 0: Projection, 1: Model, 2: View
@@ -1198,6 +1296,9 @@ class TriangleApplication(Application):
     def __del__(self):
 
         if self.render_semaphores['present'] is not None:
+
+            if self.pipeline is not None:
+                self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
 
             if self.pipeline_layout is not None:
                 self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)

@@ -14,6 +14,20 @@ NULL_HANDLE = c_size_t(0)
 NULL_HANDLE_PTR = cast(NULL, POINTER(c_size_t) )
 NULL_CUINT_PTR = cast(NULL, POINTER(c_uint) )
 
+### Debug function type ###
+
+fn_DebugReportCallbackEXT = CFUNCTYPE(
+    c_int,       # return value
+    c_uint,      # flags
+    c_uint,      # objectType
+    c_ulonglong, # object
+    c_size_t,    # location
+    c_int,       # message code
+    c_char_p,    # LayerPrefix
+    c_char_p,    # message
+    c_void_p     # user data
+)
+
 ### HANDLES ###
 
 Instance = c_size_t
@@ -526,6 +540,8 @@ STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = 47
 STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = 48
 STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000
 STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000
+STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT = 1000011000
+STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT = 1000011000
 
 # VkSubpassContents
 SUBPASS_CONTENTS_INLINE = 0
@@ -1135,8 +1151,14 @@ define_structure('ShaderModuleCreateInfo',
     ('code_size', c_size_t), ('code', POINTER(c_uint))
 )
 
+define_structure('PipelineTessellationStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('patch_control_points', c_uint)
+)
+
 define_structure('GraphicsPipelineCreateInfo',
-    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('stage_count', c_uint),
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('stage_count', c_uint),
     ('stages', POINTER(PipelineShaderStageCreateInfo)),
     ('vertex_input_state', POINTER(PipelineVertexInputStateCreateInfo)),
     ('input_assembly_state', POINTER(PipelineInputAssemblyStateCreateInfo)),
@@ -1149,6 +1171,11 @@ define_structure('GraphicsPipelineCreateInfo',
     ('dynamic_state', POINTER(PipelineDynamicStateCreateInfo)),
     ('layout', PipelineLayout), ('render_pass', RenderPass), ('subpass', c_uint),
     ('base_pipeline_handle', Pipeline), ('base_pipeline_index', c_uint)
+)
+
+define_structure('DebugReportCallbackCreateInfoEXT',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('callback', fn_DebugReportCallbackEXT), ('user_data', c_void_p)
 )
 
 del mod
@@ -1176,7 +1203,9 @@ INSTANCE_FUNCTIONS = (
     (b'vkGetPhysicalDeviceSurfaceFormatsKHR', c_uint, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR)),
     (b'vkGetPhysicalDeviceFormatProperties', None, PhysicalDevice, c_uint, POINTER(FormatProperties)),
     (b'vkGetPhysicalDeviceMemoryProperties', None, PhysicalDevice, POINTER(PhysicalDeviceMemoryProperties)),
-
+    (b'vkCreateDebugReportCallbackEXT', c_uint, Instance, POINTER(DebugReportCallbackCreateInfoEXT), c_void_p, POINTER(DebugReportCallbackEXT)),
+    (b'vkDestroyDebugReportCallbackEXT', None, Instance, DebugReportCallbackEXT, c_void_p),
+    (b'vkDebugReportMessageEXT', None, Instance, c_uint, c_uint, c_ulonglong, c_size_t, c_int, c_char_p, c_char_p),
 )
 
 DEVICE_FUNCTIONS = (
@@ -1223,6 +1252,8 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyPipelineLayout', None, Device, PipelineLayout, c_void_p),
     (b'vkCreateShaderModule', c_uint, Device, POINTER(ShaderModuleCreateInfo), c_void_p, POINTER(ShaderModule)),
     (b'vkDestroyShaderModule', None, Device, ShaderModule, c_void_p),
+    (b'vkCreateGraphicsPipelines', c_uint, Device, PipelineCache, c_uint, POINTER(GraphicsPipelineCreateInfo), c_void_p, POINTER(Pipeline)),
+    (b'vkDestroyPipeline', None, Device, Pipeline, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):
