@@ -982,16 +982,61 @@ class TriangleApplication(Application):
         vk.memmove(self.matrices, data, matsize)
         self.UnmapMemory(self.device, self.uniform_data['memory'])
       
+    def create_descriptor_set_layout(self):
+        # Setup layout of descriptors used in this example
+		# Basically connects the different shader stages to descriptors
+		# for binding uniform buffers, image samplers, etc.
+		# So every shader binding should map to one descriptor set layout
+		# binding
+
+        # Binding 0 : Uniform buffer (Vertex shader)
+        binding = vk.DescriptorSetLayoutBinding(
+            descriptor_type=vk.DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            descriptor_count=1, stage_flags=vk.SHADER_STAGE_VERTEX_BIT,
+            immutable_samplers=vk.NULL_HANDLE_PTR
+        )
+
+        layout = vk.DescriptorSetLayoutCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+            next=vk.NULL, flags=0, binding_count=0, bindings=pointer(binding)
+        )
+
+        ds_layout = vk.DescriptorSetLayout(0)
+        result = self.CreateDescriptorSetLayout(self.device, byref(layout), vk.NULL, byref(ds_layout))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not create descriptor set layout')
+
+        # Create the pipeline layout that is used to generate the rendering pipelines that
+		# are based on this descriptor set layout
+		# In a more complex scenario you would have different pipeline layouts for different
+		# descriptor set layouts that could be reused
+        pipeline_info = vk.PipelineLayoutCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, next=vk.NULL,
+            flags=0, set_layout_count=1, set_layouts=pointer(ds_layout),
+            push_constant_range_count=0
+        )
+
+        pipeline_layout = vk.PipelineLayout(0)
+        result = self.CreatePipelineLayout(self.device, byref(pipeline_info), vk.NULL, byref(pipeline_layout))
+
+
+        self.pipeline_layout = pipeline_layout
+        self.descriptor_set_layout = ds_layout
+
     def __init__(self):
         Application.__init__(self)
 
+        self.pipeline_layout = None
+        self.descriptor_set_layout = None
         self.render_semaphores = {'present': None, 'render': None}
         self.matrices = (Mat4*3)(Mat4(), Mat4(), Mat4()) # 0: Projection, 1: Model, 2: View
+        
         self.uniform_data = {
             'buffer': vk.Buffer(0),
             'memory': vk.DeviceMemory(0),
             'descriptor': vk.DescriptorBufferInfo()
         }
+
         self.triangle = {
             'buffer': vk.Buffer(0),
             'memory': vk.DeviceMemory(0),
@@ -1004,10 +1049,17 @@ class TriangleApplication(Application):
         self.create_semaphores()
         self.create_triangle()
         self.create_uniform_buffers()
+        self.create_descriptor_set_layout()
 
     def __del__(self):
 
         if self.render_semaphores['present'] is not None:
+
+            if self.pipeline_layout is not None:
+                self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
+
+            if self.descriptor_set_layout is not None:
+                self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
 
             if self.triangle['buffer'].value != 0:
                 self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)

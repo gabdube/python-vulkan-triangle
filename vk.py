@@ -1034,6 +1034,26 @@ define_structure('DescriptorBufferInfo',
     ('buffer', Buffer), ('offset', c_ulonglong), ('range', c_ulonglong)
 )
 
+define_structure('DescriptorSetLayoutBinding',
+    ('binding', c_uint), ('descriptor_type', c_uint), ('descriptor_count', c_uint),
+    ('stage_flags', c_uint), ('immutable_samplers', POINTER(Sampler))
+)
+
+define_structure('DescriptorSetLayoutCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('binding_count', c_uint), ('bindings', POINTER(DescriptorSetLayoutBinding))
+)
+
+define_structure('PushConstantRange', 
+    ('stage_flags', c_uint), ('offset', c_uint), ('size', c_uint)
+)
+
+define_structure('PipelineLayoutCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('set_layout_count', c_uint),
+    ('set_layouts', POINTER(DescriptorSetLayout)), ('push_constant_range_count', c_uint),
+    ('push_constant_ranges', POINTER(PushConstantRange))
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -1100,7 +1120,11 @@ DEVICE_FUNCTIONS = (
     (b'vkBindBufferMemory', c_uint, Device, Buffer, DeviceMemory, c_ulonglong),
     (b'vkGetBufferMemoryRequirements', None, Device, Buffer, POINTER(MemoryRequirements)),
     (b'vkCmdCopyBuffer', None, CommandBuffer, Buffer, Buffer, c_uint, POINTER(BufferCopy)),
-    
+    (b'vkCreateDescriptorSetLayout', c_uint, Device, POINTER(DescriptorSetLayoutCreateInfo), c_void_p, POINTER(DescriptorSetLayout)),
+    (b'vkDestroyDescriptorSetLayout', None, Device, DescriptorSetLayout, c_void_p),
+    (b'vkCreatePipelineLayout', c_uint, Device, POINTER(PipelineLayoutCreateInfo), c_void_p, POINTER(PipelineLayout)),
+    (b'vkDestroyPipelineLayout', None, Device, PipelineLayout, c_void_p),
+
 )
 
 def load_functions(owner, obj, functions_list, loader):

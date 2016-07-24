@@ -1,5 +1,5 @@
 # Some math functions
-# Tuple are returned because list cant be hashed (and so lrucache fails)
+# Tuple are returned because list can't be hashed (and so lrucache fails)
 
 from math import tan, radians, sin, cos
 from functools import lru_cache
