@@ -1054,6 +1054,98 @@ define_structure('PipelineLayoutCreateInfo',
     ('push_constant_ranges', POINTER(PushConstantRange))
 )
 
+define_structure('PipelineInputAssemblyStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('topology', c_uint), ('primitive_restart_enable', c_uint)
+)
+
+define_structure('PipelineRasterizationStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('depth_clamp_enable', c_uint), ('rasterizer_discard_enable', c_uint),
+    ('polygon_mode', c_uint), ('cull_mode', c_uint),
+    ('front_face', c_uint), ('depth_bias_enable', c_uint),
+    ('depth_bias_constant_factor', c_float), ('depth_bias_clamp', c_float),
+    ('depth_bias_slope_factor', c_float), ('line_width', c_float)
+)
+
+define_structure('PipelineColorBlendAttachmentState',
+    ('blend_enable', c_uint), ('src_color_blend_factor', c_uint),
+    ('dst_color_blend_factor', c_uint), ('color_blend_op', c_uint),
+    ('src_alpha_blend_factor', c_uint), ('dst_alpha_blend_factor', c_uint),
+    ('alpha_blend_op', c_uint), ('color_write_mask', c_uint)
+)
+
+define_structure('PipelineColorBlendStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('logic_op_enable', c_uint), ('logic_op', c_uint),
+    ('attachment_count', c_uint),
+    ('attachments', POINTER(PipelineColorBlendAttachmentState)),
+    ('blend_constants', c_float*4)
+)
+
+define_structure('PipelineViewportStateCreateInfo', 
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('viewport_count', c_uint), ('viewports', c_void_p),
+    ('scissor_count', c_uint), ('scissors', c_void_p)
+)
+
+define_structure('PipelineDynamicStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('dynamic_state_count', c_uint), ('dynamic_states', POINTER(c_uint))
+)
+
+define_structure('StencilOpState',
+    ('fail_op', c_uint), ('pass_op', c_uint), ('depth_fail_op', c_uint),
+    ('compare_op', c_uint), ('compare_mask', c_uint), ('write_mask', c_uint),
+    ('reference', c_uint)
+)
+
+define_structure('PipelineDepthStencilStateCreateInfo', 
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('depth_test_enable', c_uint), ('depth_write_enable', c_uint),
+    ('depth_compare_op', c_uint), ('depth_bounds_test_enable', c_uint),
+    ('stencil_test_enable', c_uint), ('front', StencilOpState),
+    ('back', StencilOpState), ('min_depth_bounds', c_float),
+    ('max_depth_bounds', c_float)
+)
+
+define_structure('PipelineMultisampleStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('rasterization_samples', c_uint), ('sample_shading_enable', c_uint),
+    ('min_sample_shading', c_float), ('sample_mask', c_void_p),
+    ('alpha_to_coverage_enable', c_uint), ('alpha_to_one_enable', c_uint)
+)
+
+define_structure('PipelineShaderStageCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), 
+    ('stage', c_uint), ('module', c_void_p), ('name', c_char_p),
+    ('specialization_info', c_void_p)
+)
+
+define_structure('PipelineVertexInputStateCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint),
+    ('vertex_binding_description_count', c_uint),
+    ('vertex_binding_descriptions', POINTER(VertexInputBindingDescription)),
+    ('vertex_attribute_description_count', c_uint),
+    ('vertex_attribute_descriptions', POINTER(VertexInputAttributeDescription))
+)
+
+define_structure('GraphicsPipelineCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('stage_count', c_uint),
+    ('stages', POINTER(PipelineShaderStageCreateInfo)),
+    ('vertex_input_state', POINTER(PipelineVertexInputStateCreateInfo)),
+    ('input_assembly_state', POINTER(PipelineInputAssemblyStateCreateInfo)),
+    ('tessellation_state', c_void_p),
+    ('viewport_state', POINTER(PipelineViewportStateCreateInfo)),
+    ('rasterization_state', POINTER(PipelineRasterizationStateCreateInfo)),
+    ('multisample_state', POINTER(PipelineMultisampleStateCreateInfo)),
+    ('depth_stencil_state', POINTER(PipelineDepthStencilStateCreateInfo)),
+    ('color_blend_state', POINTER(PipelineColorBlendStateCreateInfo)),
+    ('dynamic_state', POINTER(PipelineDynamicStateCreateInfo)),
+    ('layout', PipelineLayout), ('render_pass', RenderPass), ('subpass', c_uint),
+    ('base_pipeline_handle', Pipeline), ('base_pipeline_index', c_uint)
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###

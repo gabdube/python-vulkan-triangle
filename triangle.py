@@ -504,7 +504,7 @@ class Application(object):
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create renderpass')
 
-        self.renderpass = renderpass
+        self.render_pass = renderpass
 
     def create_pipeline_cache(self):
         create_info = vk.PipelineCacheCreateInfo(
@@ -527,7 +527,7 @@ class Application(object):
 
         create_info = vk.FramebufferCreateInfo(
             s_type=vk.STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            next=vk.NULL, flags=0, render_pass=self.renderpass,
+            next=vk.NULL, flags=0, render_pass=self.render_pass,
             attachment_count=2, attachments=cast(attachments, POINTER(vk.ImageView)),
             width=width, height=height, layers=1
         )
@@ -645,7 +645,7 @@ class Application(object):
         self.setup_buffer = None
         self.draw_buffers = None
         self.present_buffers = None
-        self.renderpass = None
+        self.render_pass = None
         self.pipeline_cache = None
         self.framebuffers = None
         self.depth_stencil = {'image':None, 'mem':None, 'view':None}
@@ -685,8 +685,8 @@ class Application(object):
                 self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
                 self.FreeCommandBuffers(dev, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
 
-            if self.renderpass is not None:
-                self.DestroyRenderPass(self.device, self.renderpass, vk.NULL)
+            if self.render_pass is not None:
+                self.DestroyRenderPass(self.device, self.render_pass, vk.NULL)
             
             if self.framebuffers is not None:
                 for fb in self.framebuffers:
@@ -961,27 +961,7 @@ class TriangleApplication(Application):
         self.uniform_data['descriptor'].range = vk.sizeof(self.matrices)
 
         self.update_uniform_buffers()
-
-    def update_uniform_buffers(self):
-        data = vk.c_void_p(0)
-        matsize = vk.sizeof(Mat4)*3
-
-        # Projection 
-        width, height = self.window.dimensions()
-        self.matrices[0].set_data(perspective(60.0, width/height, 0.1, 256.0))
-
-        # View
-        self.matrices[1].set_data(translate(None, (0.0, 0.0, self.zoom)))
-
-        # Model
-        mod_mat = rotate(None, self.rotation[0], (1.0, 0.0, 0.0))
-        mod_mat = rotate(mod_mat, self.rotation[1], (0.0, 1.0, 0.0))
-        self.matrices[2].set_data(rotate(mod_mat, self.rotation[2], (0.0, 0.0, 1.0)))
-
-        self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
-        vk.memmove(self.matrices, data, matsize)
-        self.UnmapMemory(self.device, self.uniform_data['memory'])
-      
+ 
     def create_descriptor_set_layout(self):
         # Setup layout of descriptors used in this example
 		# Basically connects the different shader stages to descriptors
@@ -1023,6 +1003,127 @@ class TriangleApplication(Application):
         self.pipeline_layout = pipeline_layout
         self.descriptor_set_layout = ds_layout
 
+    def create_pipeline(self):
+        tri = self.triangle
+
+        # Vertex input state
+        input_state = vk.PipelineVertexInputStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, next=vk.NULL, flags=0,
+            vertex_binding_description_count = len(tri['bindings']),
+            vertex_attribute_description_count = len(tri['attributes']),
+            vertex_binding_descriptions = cast(tri['bindings'], POINTER(vk.VertexInputBindingDescription)),
+            vertex_attribute_descriptions = cast(tri['attributes'], POINTER(vk.VertexInputAttributeDescription))
+        )
+        tri['input_state'] = input_state
+
+        # Vertex input state
+		# Describes the topoloy used with this pipeline 
+        input_assembly_state = vk.PipelineInputAssemblyStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, next=vk.NULL,
+            flags=0, primitive_restart_enable=0,
+            topology=vk.PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,  #This pipeline renders vertex data as triangle lists
+        )
+
+        # Rasterization state
+        raster_state = vk.PipelineRasterizationStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, next=vk.NULL,
+            flags=0,
+            polygon_mode=vk.POLYGON_MODE_FILL,          # Solid polygon mode
+            cull_mode= vk.CULL_MODE_NONE,               # No culling
+            front_face=vk.FRONT_FACE_CLOCKWISE,
+            depth_clamp_enable=0, rasterizer_discard_enable=0,
+            depth_bias_enable=0, line_width=1.0
+        )
+
+        # Color blend state
+        # Describes blend modes and color masks
+        blend_state = vk.PipelineColorBlendAttachmentState(
+            color_write_mask=0xF, blend_enable=0
+        )
+        color_blend_state = vk.PipelineColorBlendStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, next=vk.NULL,
+            flags=0, logic_op_enable=0, attachment_count=1, attachments=pointer(blend_state)
+        )
+
+        # Viewport state
+        viewport_state = vk.PipelineViewportStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+            viewport_count=1, scissor_count=1
+        )
+
+        # Enable dynamic states
+		# Describes the dynamic states to be used with this pipeline
+		# Dynamic states can be set even after the pipeline has been created
+		# So there is no need to create new pipelines just for changing
+		# a viewport's dimensions or a scissor box
+        dynamic_states = (c_uint*2)(vk.DYNAMIC_STATE_VIEWPORT, vk.DYNAMIC_STATE_SCISSOR)
+        dynamic_state = vk.PipelineDynamicStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, next=vk.NULL,
+            flags=0,dynamic_state_count=2,
+            dynamic_states=cast(dynamic_states, POINTER(c_uint))
+        )
+
+        # Depth and stencil state
+		# Describes depth and stenctil test and compare ops
+        # Basic depth compare setup with depth writes and depth test enabled
+		# No stencil used 
+        op_state = vk.StencilOpState(
+            fail_op=vk.STENCIL_OP_KEEP, pass_op=vk.STENCIL_OP_KEEP,
+            compare_op=vk.COMPARE_OP_ALWAYS
+        )
+        depth_stencil_state = vk.PipelineDepthStencilStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, next=vk.NULL, 
+            flags=0, depth_test_enable=1, depth_write_enable=1, 
+            depth_compare_op=vk.COMPARE_OP_LESS_OR_EQUAL,
+            depth_bounds_test_enable=0, stencil_test_enable=0,
+            front=op_state, back=op_state
+        )
+
+        # Multi sampling state
+        # No multi sampling used in this example
+        multisample_state = vk.PipelineMultisampleStateCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, next=vk.NULL, 
+            flags=0, rasterization_samples=vk.SAMPLE_COUNT_1_BIT
+        )
+
+        # Load shaders
+		# Shaders are loaded from the SPIR-V format, which can be generated from glsl
+        shader_stages = (vk.PipelineShaderStageCreateInfo * 2)()
+
+        create_info = vk.GraphicsPipelineCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=vk.NULL,
+            flags=0, layout=self.pipeline_layout, render_pass=self.render_pass, stage_count=2, 
+            stages=cast(shader_stages, POINTER(vk.PipelineShaderStageCreateInfo)),
+            vertex_input_state=pointer(input_state),
+            input_assembly_state=pointer(input_assembly_state),
+            rasterization_state=pointer(raster_state),
+            color_blend_state=pointer(color_blend_state),
+            multisample_state=pointer(multisample_state),
+            viewport_state=pointer(viewport_state),
+            depth_stencil_state=pointer(depth_stencil_state),
+            tessellation_state=vk.NULL
+        )
+
+    def update_uniform_buffers(self):
+        data = vk.c_void_p(0)
+        matsize = vk.sizeof(Mat4)*3
+
+        # Projection 
+        width, height = self.window.dimensions()
+        self.matrices[0].set_data(perspective(60.0, width/height, 0.1, 256.0))
+
+        # View
+        self.matrices[1].set_data(translate(None, (0.0, 0.0, self.zoom)))
+
+        # Model
+        mod_mat = rotate(None, self.rotation[0], (1.0, 0.0, 0.0))
+        mod_mat = rotate(mod_mat, self.rotation[1], (0.0, 1.0, 0.0))
+        self.matrices[2].set_data(rotate(mod_mat, self.rotation[2], (0.0, 0.0, 1.0)))
+
+        self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
+        vk.memmove(self.matrices, data, matsize)
+        self.UnmapMemory(self.device, self.uniform_data['memory'])
+
     def __init__(self):
         Application.__init__(self)
 
@@ -1043,13 +1144,15 @@ class TriangleApplication(Application):
             'indices_buffer': vk.Buffer(0),
             'indices_memory': vk.DeviceMemory(0),
             'bindings': None,
-            'attributes': None
+            'attributes': None,
+            'input_state': None
         }
 
         self.create_semaphores()
         self.create_triangle()
         self.create_uniform_buffers()
         self.create_descriptor_set_layout()
+        self.create_pipeline()
 
     def __del__(self):
 
