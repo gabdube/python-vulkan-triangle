@@ -718,8 +718,6 @@ class Application(object):
         return (False, None)
 
     def load_shader(self, name, stage):
-        shader_name = (name.split('.')[0]).encode()
-        
         # Read the shader data
         path = '{}/shaders/{}'.format(dirname(__file__), name)
         shader_f = open(path, 'rb')
@@ -741,7 +739,7 @@ class Application(object):
 
         shader_info = vk.PipelineShaderStageCreateInfo(
             s_type=vk.STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, next=vk.NULL,
-            flags=0, stage=stage, module=module, name=shader_name,
+            flags=0, stage=stage, module=module, name=b'main',
             specialization_info=vk.NULL
         )
 
@@ -1106,7 +1104,7 @@ class TriangleApplication(Application):
 
         layout = vk.DescriptorSetLayoutCreateInfo(
             s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            next=vk.NULL, flags=0, binding_count=0, bindings=pointer(binding)
+            next=vk.NULL, flags=0, binding_count=1, bindings=pointer(binding)
         )
 
         ds_layout = vk.DescriptorSetLayout(0)
@@ -1221,11 +1219,6 @@ class TriangleApplication(Application):
             self.load_shader('triangle.frag.spv', vk.SHADER_STAGE_FRAGMENT_BIT)
         )
 
-        tesselation_info = vk.PipelineTessellationStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_TESSELLATION_STATE_CREATE_INFO, next=vk.NULL, flags=0,
-            path_control_points=0
-        )
-
         create_info = vk.GraphicsPipelineCreateInfo(
             s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=vk.NULL,
             flags=0, stage_count=2, 
@@ -1238,6 +1231,7 @@ class TriangleApplication(Application):
             multisample_state=pointer(multisample_state),
             depth_stencil_state=pointer(depth_stencil_state),
             color_blend_state=pointer(color_blend_state),
+            dynamic_state=pointer(dynamic_state),
             layout=self.pipeline_layout,
             render_pass=self.render_pass,
             subpass=0,
@@ -1246,11 +1240,11 @@ class TriangleApplication(Application):
         )
 
         pipeline = vk.Pipeline(0)
-        # result = self.CreateGraphicsPipelines(self.device, self.pipeline_cache, 1, byref(create_info), vk.NULL, byref(pipeline))
-        # if result != vk.SUCCESS:
-        #     raise RuntimeError('Failed to create the graphics pipeline')
-        #
-        #self.pipeline = pipeline
+        result = self.CreateGraphicsPipelines(self.device, self.pipeline_cache, 1, byref(create_info), vk.NULL, byref(pipeline))
+        if result != vk.SUCCESS:
+             raise RuntimeError('Failed to create the graphics pipeline')
+        
+        self.pipeline = pipeline
 
     def update_uniform_buffers(self):
         data = vk.c_void_p(0)
