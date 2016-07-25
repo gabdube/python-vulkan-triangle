@@ -430,7 +430,7 @@ class Application(object):
         # in the swap chain
         # Command buffers store a reference to the
         # frame buffer inside their render pass info
-        # so for static usage withouth having to rebuild
+        # so for static usage without having to rebuild
         # them each frame, we use one per frame buffer
         image_count = len(self.swapchain.images)
         draw_buffers = (vk.CommandBuffer*image_count)()
@@ -1246,6 +1246,72 @@ class TriangleApplication(Application):
         
         self.pipeline = pipeline
 
+    def create_descriptor_pool(self):
+
+        # We need to tell the API the number of max. requested descriptors per type
+        # This example only uses one descriptor type (uniform buffer) and only
+		# requests one descriptor of this type
+        type_counts = vk.DescriptorPoolSize(
+            type=vk.DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            descriptor_count=1
+        )
+
+        # Create the global descriptor pool
+		# All descriptors used in this example are allocated from this pool
+        pool_create_info = vk.DescriptorPoolCreateInfo(
+            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, next=vk.NULL,
+            flags=0, pool_size_count=1, pool_sizes=pointer(type_counts),
+            max_sets=1  
+        )
+
+        pool = vk.DescriptorPool(0)
+        result = self.CreateDescriptorPool(self.device, byref(pool_create_info), vk.NULL, byref(pool))
+
+        self.descriptor_pool = pool
+
+    def create_command_buffers(self):
+        
+        begin_info = vk.CommandBufferBeginInfo(
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=vk.NULL
+        )
+
+        clear_values = (vk.ClearValue*2)()
+        clear_values.color = (c_float*4)(0.0, 0.0, 0.0, 1.0)
+        clear_values.depth_stencil = vk.ClearDepthStencilValue(depth=1.0, stencil=0)
+
+        width, height = self.window.dimensions()
+        render_area = vk.Rect2D(
+            offset=vk.Offset2D(x=0, y=0),
+            extent=vk.Extent2D(width=width, height=height)
+        )
+        render_pass_begin = vk.RenderPassBeginInfo(
+            s_type=vk.STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, next=vk.NULL,
+            render_pass=self.render_pass, render_area=render_area,
+            clear_value_count=2, 
+            clear_values = cast(clear_values, POINTER(vk.ClearValue))
+        )
+
+        for index, cmdbuf in enumerate(self.draw_buffers):
+            render_pass_begin.framebuffer = self.framebuffers[index]
+
+            assert(self.BeginCommandBuffer(cmdbuf, byref(begin_info)) == vk.SUCCESS)
+
+            self.CmdBeginRenderPass(cmdbuf, byref(render_pass_begin), vk.SUBPASS_CONTENTS_INLINE)
+
+            # Update dynamic viewport state
+            viewport = vk.Viewport(
+                x=0.0, y=0.0, width=float(width), height=float(height),
+                min_depth=0.0, max_depth=1.0
+            )
+            self.CmdSetViewport(cmdbuf, 0, 1, byref(viewport))
+
+            # Update dynamic scissor state
+            scissor = render_area
+            self.CmdSetScissor(cmdbuf, 0, 1, byref(scissor))
+
+            self.CmdEndRenderPass(cmdbuf)
+            assert(self.EndCommandBuffer(cmdbuf) == vk.SUCCESS)
+
     def update_uniform_buffers(self):
         data = vk.c_void_p(0)
         matsize = vk.sizeof(Mat4)*3
@@ -1274,6 +1340,7 @@ class TriangleApplication(Application):
         self.pipeline_layout = None
         self.pipeline = None
         self.descriptor_set_layout = None
+        self.descriptor_pool = None
         self.render_semaphores = {'present': None, 'render': None}
         self.matrices = (Mat4*3)(Mat4(), Mat4(), Mat4()) # 0: Projection, 1: Model, 2: View
         
@@ -1298,10 +1365,15 @@ class TriangleApplication(Application):
         self.create_uniform_buffers()
         self.create_descriptor_set_layout()
         self.create_pipeline()
+        self.create_descriptor_pool()
+        self.create_command_buffers()
 
     def __del__(self):
 
         if self.render_semaphores['present'] is not None:
+
+            if self.descriptor_pool is not None:
+                self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
 
             if self.pipeline is not None:
                 self.DestroyPipeline(self.device, self.pipeline, vk.NULL)

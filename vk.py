@@ -862,6 +862,17 @@ mod = modules['vk']
 def define_structure(name, *args):
     setattr(mod, name, type(name, (Structure,), {'_fields_': args}))
 
+def define_union(name, *args):
+    setattr(mod, name, type(name, (Union,), {'_fields_': args}))
+
+define_structure('Extent3D', ('width', c_uint), ('height', c_uint), ('depth', c_uint))
+define_structure('Extent2D', ('width', c_uint), ('height', c_uint))
+define_structure('Offset2D', ('x', c_int), ('y', c_int))
+
+define_structure('Rect2D',
+    ('offset', Offset2D), ('extent', Extent2D)
+)
+
 define_structure('ApplicationInfo',
  ('s_type', c_uint), ('next', c_void_p), ('application_name', c_char_p), ('application_version', c_uint),
  ('engine_name', c_char_p), ('engine_version', c_uint), ('api_version', c_uint))
@@ -871,8 +882,6 @@ define_structure('InstanceCreateInfo',
  ('enabled_layer_count', c_uint), ('enabled_layer_names', POINTER(c_char_p)), ('enabled_extension_count', c_uint),
  ('enabled_extension_names', POINTER(c_char_p)))
 
-define_structure('Extent3D', ('width', c_uint), ('height', c_uint), ('depth', c_uint))
-define_structure('Extent2D', ('width', c_uint), ('height', c_uint))
 
 define_structure('QueueFamilyProperties',
   ('queue_flags', c_uint), ('queue_count', c_uint), ('timestamp_valid_bits', c_uint),
@@ -1178,6 +1187,39 @@ define_structure('DebugReportCallbackCreateInfoEXT',
     ('callback', fn_DebugReportCallbackEXT), ('user_data', c_void_p)
 )
 
+define_union('ClearColorValue',
+    ('float32', c_float*4), ('in32', c_int*4), ('uin32', c_uint*4)
+)
+
+define_structure('ClearDepthStencilValue',
+    ('depth', c_float), ('stencil', c_uint)
+)
+
+define_union('ClearValue',
+    ('color', ClearColorValue), ('depth_stencil', ClearDepthStencilValue)
+)
+
+define_structure('RenderPassBeginInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('render_pass', RenderPass),
+    ('framebuffer', Framebuffer), ('render_area', Rect2D),
+    ('clear_value_count', c_uint), ('clear_values', POINTER(ClearValue))
+)
+
+define_structure('Viewport',
+    ('x', c_float), ('y', c_float), ('width', c_float), ('height', c_float),
+    ('min_depth', c_float), ('max_depth', c_float)
+)
+
+define_structure('DescriptorPoolSize',
+    ('type', c_uint), ('descriptor_count', c_uint)
+)
+
+define_structure('DescriptorPoolCreateInfo',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('max_sets', c_uint),
+    ('pool_size_count', c_uint), ('pool_sizes', POINTER(DescriptorPoolSize))
+)
+
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -1254,6 +1296,12 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyShaderModule', None, Device, ShaderModule, c_void_p),
     (b'vkCreateGraphicsPipelines', c_uint, Device, PipelineCache, c_uint, POINTER(GraphicsPipelineCreateInfo), c_void_p, POINTER(Pipeline)),
     (b'vkDestroyPipeline', None, Device, Pipeline, c_void_p),
+    (b'vkCmdBeginRenderPass', None, CommandBuffer, POINTER(RenderPassBeginInfo), c_uint),
+    (b'vkCmdEndRenderPass', None, CommandBuffer),
+    (b'vkCmdSetViewport', None, CommandBuffer, c_uint, c_uint, POINTER(Viewport)),
+    (b'vkCmdSetScissor', None, CommandBuffer, c_uint, c_uint, POINTER(Rect2D)),
+    (b'vkCreateDescriptorPool', c_uint, Device, POINTER(DescriptorPoolCreateInfo), c_void_p, POINTER(DescriptorPool)),
+    (b'vkDestroyDescriptorPool', None, Device, DescriptorPool, c_void_p),
 )
 
 def load_functions(owner, obj, functions_list, loader):
