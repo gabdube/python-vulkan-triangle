@@ -38,7 +38,12 @@ class Debugger(object):
 
     @staticmethod
     def print_message(flags, object_type, object, location, message_code, layer, message, user_data):
-        print(message[::].decode())
+        if flags & vk.DEBUG_REPORT_ERROR_BIT_EXT:
+            _type = 'ERROR'
+        elif flags & vk.DEBUG_REPORT_WARNING_BIT_EXT:
+            _type = 'WARNING'
+
+        print("{}: {}".format(_type, message[::].decode()))
         return 0
 
     def start(self):
@@ -50,7 +55,7 @@ class Debugger(object):
         create_info = vk.DebugReportCallbackCreateInfoEXT(
             s_type=vk.STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
             next=vk.NULL, 
-            flags=vk.DEBUG_REPORT_ERROR_BIT_EXT | vk.DEBUG_REPORT_WARNING_BIT_EXT | vk.DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT,
+            flags=vk.DEBUG_REPORT_ERROR_BIT_EXT | vk.DEBUG_REPORT_WARNING_BIT_EXT,
             callback=callback_fn,
             user_data=vk.NULL
         )
@@ -72,6 +77,9 @@ class Swapchain(BaseSwapchain):
 
     def __init__(self, app):
         super().__init__(app)
+
+        self.images = None
+        self.views = None
 
     def create(self):
         app = self.app()
@@ -161,15 +169,18 @@ class Swapchain(BaseSwapchain):
         else:
             raise RuntimeError('Failed to create the swapchain')
         
-    def create_images(self, image_count, color_format):
-        self.images = (vk.Image * image_count)()
-        self.views = (vk.ImageView * image_count)()
+    def create_images(self, req_image_count, color_format):
         app = self.app()
 
-        image_count = c_uint(image_count)
-        result = app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(c_uint)))
-        if result != vk.SUCCESS:
+        image_count = c_uint(0)
+        result = app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), vk.NULL_CUINT_PTR)
+        if result != vk.SUCCESS and req_image_count != image_count.value:
             raise RuntimeError('Failed to get the swapchain images')
+ 
+        self.images = (vk.Image * image_count.value)()
+        self.views = (vk.ImageView * image_count.value)()
+
+        assert( app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(c_uint))) == vk.SUCCESS)
 
         for index, image in enumerate(self.images):
 
@@ -180,7 +191,7 @@ class Swapchain(BaseSwapchain):
 
             subresource_range = vk.ImageSubresourceRange(
                 aspect_mask=vk.IMAGE_ASPECT_COLOR_BIT, base_mip_level=0,
-                level_count=1, base_array_layer=1, layer_count=1,
+                level_count=1, base_array_layer=0, layer_count=1,
             )
 
             view_create_info = vk.ImageViewCreateInfo(
@@ -276,12 +287,13 @@ class Application(object):
 
         # Enumerate the physical devices
         gpu_count = c_uint(0)
-        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), vk.NULL_HANDLE )
+        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), vk.NULL_HANDLE_PTR )
         if result != vk.SUCCESS or gpu_count.value == 0:
             raise RuntimeError('Could not fetch the physical devices or there are no devices available')
 
         buf = (vk.PhysicalDevice*gpu_count.value)()
         self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), cast(buf, POINTER(vk.PhysicalDevice)))
+
 
         # For this example use the first available device
         self.gpu = vk.PhysicalDevice(buf[0])
@@ -478,7 +490,7 @@ class Application(object):
 
         subres_range = vk.ImageSubresourceRange(
             aspect_mask=vk.IMAGE_ASPECT_DEPTH_BIT, base_mip_level=0,
-            level_count=1, base_array_layer=1, layer_count=1,
+            level_count=1, base_array_layer=0, layer_count=1,
         )
 
         create_view_info = vk.ImageViewCreateInfo(
@@ -524,15 +536,13 @@ class Application(object):
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create image view for depth stencil')
             
-        
         self.formats['depth'] = depth_format
         self.depth_stencil['image'] = depthstencil_image
         self.depth_stencil['mem'] = depthstencil_mem
         self.depth_stencil['view'] = depthstencil_view
 
     def create_renderpass(self):
-        attachments = (vk.AttachmentDescription*2)()
-        color, depth = attachments
+        color, depth = vk.AttachmentDescription(), vk.AttachmentDescription()
 
         #Color attachment
         color.format = self.formats['color']
@@ -554,6 +564,7 @@ class Application(object):
         depth.initial_layout = vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
         depth.final_layout = vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
 
+
         color_ref = vk.AttachmentReference( attachment=0, layout=vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL )
         depth_ref = vk.AttachmentReference( attachment=1, layout=vk.IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL )
 
@@ -565,9 +576,10 @@ class Application(object):
             preserve_attachment_count=0, preserve_attachments=cast(vk.NULL, POINTER(c_uint))
         )
 
+        attachments = (vk.AttachmentDescription*2)(color, depth)
         create_info = vk.RenderPassCreateInfo(
             s_type=vk.STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            next=vk.NULL, attachment_count=2,
+            next=vk.NULL, flags=0, attachment_count=2,
             attachments=cast(attachments, POINTER(vk.AttachmentDescription)),
             subpass_count=1, subpasses=pointer(subpass), dependency_count=0,
             dependencies=vk.NULL
@@ -595,7 +607,7 @@ class Application(object):
 
     def create_framebuffer(self):
         attachments = (vk.ImageView*2)()
-        attachments[1] = self.depth_stencil['image']
+        attachments[1] = self.depth_stencil['view']
 
         width, height = self.window.dimensions()
 
@@ -607,14 +619,14 @@ class Application(object):
         )
 
         self.framebuffers = (vk.Framebuffer*len(self.swapchain.images))()
-        for index, view in enumerate(self.swapchain.images):
+        for index, view in enumerate(self.swapchain.views):
             fb = vk.Framebuffer(0)
             attachments[0] = view
             result = self.CreateFramebuffer(self.device, byref(create_info), vk.NULL, byref(fb))
             if result != vk.SUCCESS:
                 raise RuntimeError('Could not create the framebuffers')
             
-            
+            self.framebuffers[index] = fb
 
     def flush_setup_buffer(self):
         if self.EndCommandBuffer(self.setup_buffer) != vk.SUCCESS:
@@ -644,7 +656,7 @@ class Application(object):
         if subres is None:
             subres = vk.ImageSubresourceRange(
                 aspect_mask=aspect_mask, base_mip_level=0,
-                level_count=1, base_array_layer=1, layer_count=1,
+                level_count=1, base_array_layer=0, layer_count=1,
             )
 
         barrier = vk.ImageMemoryBarrier(
@@ -968,7 +980,7 @@ class TriangleApplication(Application):
         assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(indices['memory'])) == vk.SUCCESS)
         assert(self.MapMemory(self.device, indices['memory'], 0, indices_size, 0, byref(data)) == vk.SUCCESS)
         vk.memmove(vertices_data, data, vertices_size)
-        self.UnmapMemory(self.device, vertex['memory'])
+        self.UnmapMemory(self.device, indices['memory'])
         assert(self.BindBufferMemory(self.device, indices['buffer'], indices['memory'], 0) == vk.SUCCESS)
         
         # Same steps as 5, 7 (with the exception for the usage flags)

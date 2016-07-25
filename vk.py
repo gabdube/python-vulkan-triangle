@@ -921,7 +921,7 @@ define_structure('SurfaceFormatKHR', ('format', c_uint), ('color_space', c_uint)
 
 define_structure('SwapchainCreateInfoKHR',
     ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('surface', SurfaceKHR),
-    ('min_image_count', c_uint), ('format', c_uint), ('color_space_khr', c_uint),
+    ('min_image_count', c_uint), ('image_format', c_uint), ('color_space_khr', c_uint),
     ('image_extent', Extent2D), ('image_array_layers', c_uint), ('image_usage', c_uint),
     ('image_sharing_mode', c_uint), ('queue_family_index_count', c_uint),
     ('queue_family_indices', POINTER(c_uint)), ('pre_transform', c_uint),
@@ -986,9 +986,9 @@ define_structure('PhysicalDeviceMemoryProperties',
 )
 
 define_structure('AttachmentDescription',
-    ('flags', c_uint), ('format', c_uint), ('samples', c_uint), ('load_op', c_uint),
-    ('store_op', c_uint), ('stencil_op', c_uint), ('stencil_load_op', c_uint),
-    ('stencil_store_op', c_uint), ('initial_layout', c_uint), ('final_layout', c_uint)
+    ('flags', c_uint),('format', c_uint),('samples', c_uint),('load_op', c_uint),
+    ('store_op', c_uint), ('stencil_load_op', c_uint),('stencil_store_op', c_uint),
+    ('initial_layout', c_uint), ('final_layout', c_uint)
 )
 
 define_structure('AttachmentReference', ('attachment', c_uint), ('layout', c_uint))
