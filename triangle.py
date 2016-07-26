@@ -1269,6 +1269,35 @@ class TriangleApplication(Application):
 
         self.descriptor_pool = pool
 
+    def create_descriptor_set(self):
+        # Update descriptor sets determining the shader binding points
+		# For every binding point used in a shader there needs to be one
+		# descriptor set matching that binding point
+
+        descriptor_alloc = vk.DescriptorSetAllocateInfo(
+            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, next=vk.NULL,
+            descriptor_pool=self.descriptor_pool, descriptor_set_count=1,
+            set_layouts=pointer(self.descriptor_set_layout)
+        )
+
+        descriptor_set = vk.DescriptorSet(0)
+        result = self.AllocateDescriptorSets(self.device, byref(descriptor_alloc), byref(descriptor_set))
+        if result != vk.SUCCESS:
+            raise RuntimeError('Could not allocate descriptor set')
+
+
+        #Binding 0 : Uniform buffer
+        write_set = vk.WriteDescriptorSet(
+            s_type=vk.STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, next=vk.NULL,
+            dst_set=descriptor_set, descriptor_count=1,
+            descriptor_type=vk.DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            buffer_info=pointer(self.uniform_data['descriptor']),
+            dst_binding=0 # Binds this uniform buffer to binding point 0
+        )
+
+        self.UpdateDescriptorSets(self.device, 1, byref(write_set), 0, vk.NULL)
+        self.descriptor_set = descriptor_set
+
     def create_command_buffers(self):
         
         begin_info = vk.CommandBufferBeginInfo(
@@ -1339,6 +1368,7 @@ class TriangleApplication(Application):
 
         self.pipeline_layout = None
         self.pipeline = None
+        self.descriptor_set = None
         self.descriptor_set_layout = None
         self.descriptor_pool = None
         self.render_semaphores = {'present': None, 'render': None}
@@ -1366,38 +1396,30 @@ class TriangleApplication(Application):
         self.create_descriptor_set_layout()
         self.create_pipeline()
         self.create_descriptor_pool()
+        self.create_descriptor_set()
         self.create_command_buffers()
 
     def __del__(self):
 
-        if self.render_semaphores['present'] is not None:
+        self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
 
-            if self.descriptor_pool is not None:
-                self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
+        self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
 
-            if self.pipeline is not None:
-                self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
+        self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
 
-            if self.pipeline_layout is not None:
-                self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
+        self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
 
-            if self.descriptor_set_layout is not None:
-                self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
+        self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
+        self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
 
-            if self.triangle['buffer'].value != 0:
-                self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
-                self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
+        self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
+        self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
 
-            if self.triangle['indices_buffer'].value != 0:
-                self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
-                self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+        self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
+        self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
 
-            if self.uniform_data['buffer'] != 0:
-                self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
-                self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
-
-            self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
-            self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
+        self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
+        self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
 
         Application.__del__(self)
 
