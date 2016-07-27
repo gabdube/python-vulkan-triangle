@@ -842,6 +842,8 @@ class Application(object):
 
 class TriangleApplication(Application):
 
+    VERTEX_BUFFER_BIND_ID = 0
+
     def create_semaphores(self):
         create_info = vk.SemaphoreCreateInfo(
             s_type=vk.STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -863,7 +865,7 @@ class TriangleApplication(Application):
         bindings = (vk.VertexInputBindingDescription*1)()
         attributes = (vk.VertexInputAttributeDescription*2)()
 
-        bindings[0].binding = 0
+        bindings[0].binding = self.VERTEX_BUFFER_BIND_ID
         bindings[0].stride = vk.sizeof(Vertex)
         bindings[0].input_rate = vk.VERTEX_INPUT_RATE_VERTEX
 
@@ -871,13 +873,13 @@ class TriangleApplication(Application):
 		# Describes memory layout and shader attribute locations
 
         # Location 0: Position
-        attributes[0].binding = 0
+        attributes[0].binding = self.VERTEX_BUFFER_BIND_ID
         attributes[0].location = 0
         attributes[0].format = vk.FORMAT_R32G32B32_SFLOAT
         attributes[0].offset = 0
 
         # Location 1: Color
-        attributes[1].binding = 0
+        attributes[1].binding = self.VERTEX_BUFFER_BIND_ID
         attributes[1].location = 1
         attributes[1].format = vk.FORMAT_R32G32B32_SFLOAT
         attributes[1].offset = vk.sizeof(c_float)*3
@@ -1338,6 +1340,52 @@ class TriangleApplication(Application):
             scissor = render_area
             self.CmdSetScissor(cmdbuf, 0, 1, byref(scissor))
 
+            # Bind descriptor sets describing shader binding points
+            self.CmdBindDescriptorSets(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, byref(self.descriptor_set), 0, vk.NULL)
+
+            # Bind the rendering pipeline (including the shaders)
+            self.CmdBindPipeline(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline)
+
+            # Bind triangle vertices
+            offsets = vk.c_ulonglong(0)
+            self.CmdBindVertexBuffers(cmdbuf, self.VERTEX_BUFFER_BIND_ID, 1, byref(self.triangle['buffer']), byref(offsets))
+
+            # Bind triangle indices
+            self.CmdBindIndexBuffer(cmdbuf, self.triangle['indices_buffer'], 0, vk.INDEX_TYPE_UINT32)
+
+            # Draw indexed triangle
+            self.CmdDrawIndexed(cmdbuf, 3, 1, 0, 0, 1)
+
+            # Add a present memory barrier to the end of the command buffer
+			# This will transform the frame buffer color attachment to a
+			# new layout for presenting it to the windowing system integration
+            subres = vk.ImageSubresourceRange(
+                aspect_mask=vk.IMAGE_ASPECT_COLOR_BIT, base_mip_level=0,
+                level_count=1, base_array_layer=0, layer_count=1,
+            )
+
+            barrier = vk.ImageMemoryBarrier(
+                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL,
+                src_access_mask=vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                dst_access_mask=vk.ACCESS_MEMORY_READ_BIT,
+                old_layout=vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                new_layout=vk.IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                src_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+                dst_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+                image=self.swapchain.images[index], 
+                subresource_range=subres
+            )
+
+            self.CmdPipelineBarrier(
+                cmdbuf,
+                vk.PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0,
+                0, vk.NULL,
+                0, vk.NULL,
+                1, byref(barrier)
+            )
+
             self.CmdEndRenderPass(cmdbuf)
             assert(self.EndCommandBuffer(cmdbuf) == vk.SUCCESS)
 
@@ -1362,6 +1410,40 @@ class TriangleApplication(Application):
         self.UnmapMemory(self.device, self.uniform_data['memory'])
 
     
+    def run(self):
+        """
+            Add the render phase to the asyncio loop
+        """
+        asyncio.ensure_future(self.render())
+
+    async def render(self):
+        """
+            Render the scene
+        """
+        import time
+        print('Running!')
+        loop = asyncio.get_event_loop()
+        frame_counter = 0
+        fps_timer = 0.0
+
+        while True:
+            t_start = loop.time()
+
+            # draw
+            time.sleep(0.001)
+
+            frame_counter += 1
+            t_end = loop.time()
+            delta = t_end-t_start
+            fps_timer += delta
+            if fps_timer > 1:
+                self.window.set_title('Triangle - {} fps'.format(frame_counter))
+                frame_counter = 0
+                fps_timer = 0.0
+
+
+            await asyncio.sleep(0)
+        
 
     def __init__(self):
         Application.__init__(self)
@@ -1425,11 +1507,10 @@ class TriangleApplication(Application):
 
 def main():
     app = TriangleApplication()
+    app.run()
 
     loop = asyncio.get_event_loop()
     loop.run_forever()
-
-
 
 if __name__ == '__main__':
     main()

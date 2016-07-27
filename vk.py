@@ -1317,6 +1317,12 @@ DEVICE_FUNCTIONS = (
     (b'vkAllocateDescriptorSets', c_uint, Device, c_void_p, POINTER(DescriptorSet)),
     (b'vkFreeDescriptorSets', c_uint, Device, DescriptorPool, c_uint, POINTER(DescriptorSet)),
     (b'vkUpdateDescriptorSets', None, Device, c_uint, POINTER(WriteDescriptorSet), c_uint, c_void_p),
+    (b'vkCmdBindDescriptorSets', None, CommandBuffer, c_uint, PipelineLayout, c_uint, c_uint, POINTER(DescriptorSet), c_uint, c_void_p),
+    (b'vkCmdBindPipeline', None, CommandBuffer, c_uint, Pipeline),
+    (b'vkCmdBindVertexBuffers', None, CommandBuffer, c_uint, c_uint, POINTER(Buffer), POINTER(c_ulonglong)),
+    (b'vkCmdBindIndexBuffer', None, CommandBuffer, Buffer, c_ulonglong, c_uint),
+    (b'vkCmdDrawIndexed', None, CommandBuffer, c_uint, c_uint, c_uint, c_int, c_uint),
+    
 )
 
 def load_functions(owner, obj, functions_list, loader):

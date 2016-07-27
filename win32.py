@@ -114,6 +114,10 @@ GetClientRect = u32.GetClientRect
 GetClientRect.restype = result_not_null('Failed to get window dimensions')
 GetClientRect.argtypes = (HWND, POINTER(RECT))
 
+SetWindowTextW = u32.SetWindowTextW
+SetWindowTextW.restype = result_not_null('Failed to set the window name')
+SetWindowTextW.argtypes = (HWND, LPCWSTR)
+
 ################
 
 def wndproc(window, hwnd, msg, w, l):
@@ -205,6 +209,10 @@ class Win32Window(object):
 
     def show(self):
         ShowWindow(self.__hwnd, SW_SHOWNORMAL)
+
+    def set_title(self, title):
+        title = c_wchar_p(title)
+        SetWindowTextW(self.__hwnd, title)
 
 
 class WinSwapchain(object):
