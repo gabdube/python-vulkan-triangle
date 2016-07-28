@@ -126,12 +126,13 @@ def wndproc(window, hwnd, msg, w, l):
     elif msg == WM_CLOSE:
         DestroyWindow(hwnd)
         window.__hwnd = None
+        window.app().running = False  # Stop the rendering loop of the app
         PostQuitMessage(0)
         return 0
     else:
         return DefWindowProcW(hwnd, msg, w, l)
 
-async def process_events():
+async def process_events(app):
     """
         Dispatch the user/system events to the window
     """
@@ -145,11 +146,17 @@ async def process_events():
 
         await asyncio.sleep(1/30)
 
+    # Wait til app rendering is done before exiting the loop
+    # Otherwise, the loop owns a ref of the app and therefore, it cannot be freed.
+    app = app()
+    if app is not None:
+        await app.rendering_done.wait()
+
     asyncio.get_event_loop().stop()
 
 class Win32Window(object):
     
-    def __init__(self):
+    def __init__(self, app):
 
         # Wrapper over the Windows window procedure. This allows the window object to be sent
         # to the wndproc in a simple and safe way. 
@@ -158,6 +165,7 @@ class Win32Window(object):
         self.__wndproc = WNDPROC(lambda hwnd, msg, w, l: wndproc(self, hwnd, msg, w, l))
         self.__class_name = "VULKAN_TEST_"+str(id(self))
         self.__hwnd = None
+        self.app = weakref.ref(app)
 
         mod = GetModuleHandleW(None)
 
@@ -188,7 +196,7 @@ class Win32Window(object):
         )
 
         # Process events
-        asyncio.ensure_future(process_events())
+        asyncio.ensure_future(process_events(self.app))
 
     def __del__(self):
         

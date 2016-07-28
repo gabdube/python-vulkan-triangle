@@ -78,6 +78,7 @@ class Swapchain(BaseSwapchain):
     def __init__(self, app):
         super().__init__(app)
 
+        self.swapchain = None
         self.images = None
         self.views = None
 
@@ -183,7 +184,6 @@ class Swapchain(BaseSwapchain):
         assert( app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(c_uint))) == vk.SUCCESS)
 
         for index, image in enumerate(self.images):
-
             components = vk.ComponentMapping(
                 r=vk.COMPONENT_SWIZZLE_R, g=vk.COMPONENT_SWIZZLE_G,
                 b=vk.COMPONENT_SWIZZLE_B, a=vk.COMPONENT_SWIZZLE_A,
@@ -393,7 +393,7 @@ class Application(object):
     def create_command_pool(self):
         create_info = vk.CommandPoolCreateInfo(
             s_type=vk.STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, next= vk.NULL,
-            flags=vk.COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT,
+            flags=vk.COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             queue_family_index=self.main_queue_family
         )
 
@@ -406,8 +406,9 @@ class Application(object):
 
     def create_setup_buffer(self):
         create_info = vk.CommandBufferAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            next=vk.NULL, command_pool=self.cmd_pool, level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=vk.NULL, 
+            command_pool=self.cmd_pool,
+            level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
             command_buffer_count=1
         )
         begin_info = vk.CommandBufferBeginInfo(
@@ -425,7 +426,7 @@ class Application(object):
         if self.BeginCommandBuffer(buffer, byref(begin_info)) != vk.SUCCESS:
             raise RuntimeError('Failed to start recording in the setup buffer')
 
-    def create_draw_buffers(self):
+    def create_command_buffers(self):
         # Create one command buffer per frame buffer
         # in the swap chain
         # Command buffers store a reference to the
@@ -436,8 +437,9 @@ class Application(object):
         draw_buffers = (vk.CommandBuffer*image_count)()
 
         alloc_info = vk.CommandBufferAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            next=vk.NULL, command_pool=self.cmd_pool, level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=vk.NULL,
+            command_pool=self.cmd_pool,
+            level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
             command_buffer_count=image_count
         )
 
@@ -446,16 +448,6 @@ class Application(object):
             self.draw_buffers = draw_buffers
         else:
             raise RuntimeError('Failed to drawing buffers')
-
-        # Command buffers for submitting present barriers
-        alloc_info.command_buffer_count = 2
-        present_buffers = (vk.CommandBuffer*2)()
-
-        result = self.AllocateCommandBuffers(self.device, byref(alloc_info), cast(present_buffers, POINTER(vk.CommandBuffer)))
-        if result == vk.SUCCESS:
-            self.present_buffers = present_buffers
-        else:
-            raise RuntimeError('Failed to present buffers')
     
     def create_depth_stencil(self):
         width, height = self.window.dimensions()
@@ -606,15 +598,16 @@ class Application(object):
         self.pipeline_cache = pipeline_cache
 
     def create_framebuffer(self):
-        attachments = (vk.ImageView*2)()
+        attachments = cast((vk.ImageView*2)(), POINTER(vk.ImageView))
         attachments[1] = self.depth_stencil['view']
+        
 
         width, height = self.window.dimensions()
 
         create_info = vk.FramebufferCreateInfo(
             s_type=vk.STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
             next=vk.NULL, flags=0, render_pass=self.render_pass,
-            attachment_count=2, attachments=cast(attachments, POINTER(vk.ImageView)),
+            attachment_count=2, attachments=attachments,
             width=width, height=height, layers=1
         )
 
@@ -622,6 +615,7 @@ class Application(object):
         for index, view in enumerate(self.swapchain.views):
             fb = vk.Framebuffer(0)
             attachments[0] = view
+
             result = self.CreateFramebuffer(self.device, byref(create_info), vk.NULL, byref(fb))
             if result != vk.SUCCESS:
                 raise RuntimeError('Could not create the framebuffers')
@@ -747,10 +741,17 @@ class Application(object):
         return shader_info
 
     def __init__(self):
+        self.running = False
         self.zoom = 0.0                # Scene zoom
         self.rotation = (c_float*3)()  # Scene rotation
         self.shaders_modules = []      # A list of compiled shaders. GC'ed with the application
         self.debugger = Debugger(self) # Throw errors if validations layers are activated
+
+        # Syncronization between the system events and the rendering
+        self.rendering_done = asyncio.Event()
+
+        #System window
+        self.window = Window(self)
 
         # Vulkan objets
         self.gpu = None
@@ -761,15 +762,13 @@ class Application(object):
         self.swapchain = None
         self.cmd_pool = None
         self.setup_buffer = None
-        self.draw_buffers = None
-        self.present_buffers = None
+        self.draw_buffers = []  
         self.render_pass = None
         self.pipeline_cache = None
         self.framebuffers = None
         self.depth_stencil = {'image':None, 'mem':None, 'view':None}
         self.formats = {'color':None, 'depth':None}
-        self.window = Window()
-
+        
         # Vulkan objets initialization
         self.create_instance()
         self.create_swapchain()
@@ -778,7 +777,7 @@ class Application(object):
 
         self.create_setup_buffer()
         self.swapchain.create()
-        self.create_draw_buffers()
+        self.create_command_buffers()
         self.create_depth_stencil()
         self.create_renderpass()
         self.create_pipeline_cache()
@@ -800,10 +799,9 @@ class Application(object):
             if self.setup_buffer is not None:
                 self.FreeCommandBuffers(dev, self.cmd_pool, 1, byref(self.setup_buffer))
 
-            if self.present_buffers is not None:
-                len_draw_buffers = len(self.draw_buffers)
+            len_draw_buffers = len(self.draw_buffers)
+            if len_draw_buffers > 0:
                 self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
-                self.FreeCommandBuffers(dev, self.cmd_pool, 2, cast(self.present_buffers, POINTER(vk.CommandBuffer)))
 
             if self.render_pass is not None:
                 self.DestroyRenderPass(self.device, self.render_pass, vk.NULL)
@@ -1300,14 +1298,14 @@ class TriangleApplication(Application):
         self.UpdateDescriptorSets(self.device, 1, byref(write_set), 0, vk.NULL)
         self.descriptor_set = descriptor_set
 
-    def create_command_buffers(self):
+    def init_command_buffers(self):
         
         begin_info = vk.CommandBufferBeginInfo(
             s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=vk.NULL
         )
 
         clear_values = (vk.ClearValue*2)()
-        clear_values.color = (c_float*4)(0.0, 0.0, 0.0, 1.0)
+        clear_values.color = (c_float*4)(1.0, 0.0, 0.0, 1.0)
         clear_values.depth_stencil = vk.ClearDepthStencilValue(depth=1.0, stencil=0)
 
         width, height = self.window.dimensions()
@@ -1323,10 +1321,9 @@ class TriangleApplication(Application):
         )
 
         for index, cmdbuf in enumerate(self.draw_buffers):
-            render_pass_begin.framebuffer = self.framebuffers[index]
-
             assert(self.BeginCommandBuffer(cmdbuf, byref(begin_info)) == vk.SUCCESS)
 
+            render_pass_begin.framebuffer = self.framebuffers[index]
             self.CmdBeginRenderPass(cmdbuf, byref(render_pass_begin), vk.SUBPASS_CONTENTS_INLINE)
 
             # Update dynamic viewport state
@@ -1375,11 +1372,25 @@ class TriangleApplication(Application):
                 image=self.swapchain.images[index], 
                 subresource_range=subres
             )
-
+            
             self.CmdPipelineBarrier(
                 cmdbuf,
                 vk.PIPELINE_STAGE_ALL_COMMANDS_BIT,
                 vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+                0,
+                0, vk.NULL,
+                0, vk.NULL,
+                1, byref(barrier)
+            )
+
+            barrier.src_access_mask = vk.ACCESS_MEMORY_READ_BIT
+            barrier.dst_access_mask = vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+            barrier.old_layout = vk.IMAGE_LAYOUT_PRESENT_SRC_KHR
+            barrier.new_layout = vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+            self.CmdPipelineBarrier(
+                cmdbuf,
+                vk.PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                 0,
                 0, vk.NULL,
                 0, vk.NULL,
@@ -1416,21 +1427,85 @@ class TriangleApplication(Application):
         """
         asyncio.ensure_future(self.render())
 
+    def draw(self):
+        current_buffer = c_uint(0)
+
+        #  Get next image in the swap chain (back/front buffer)
+        result = self.AcquireNextImageKHR(
+            self.device, self.swapchain.swapchain, vk.c_ulonglong(-1),
+            self.render_semaphores['present'], vk.Fence(0), byref(current_buffer)
+        )
+        if result != vk.SUCCESS:
+            raise Exception("Could not aquire next image from swapchain")
+
+        cb = current_buffer.value
+        print("Sending image {}".format(hex(self.swapchain.images[cb])))
+
+        # The submit information structure contains a list of
+		# command buffers and semaphores to be submitted to a queue
+		# If you want to submit multiple command buffers, pass an array
+        stages = c_uint(vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT)
+        drawbuf = vk.CommandBuffer(self.draw_buffers[cb])
+        submit_info = vk.SubmitInfo(
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO,
+            wait_dst_stage_mask=pointer(stages),
+
+            # The wait semaphore ensures that the image is presented 
+		    # before we start submitting command buffers again
+            wait_semaphore_count=1,
+            wait_semaphores=pointer(self.render_semaphores['present']),
+
+            # The signal semaphore is used during queue presentation
+            # to ensure that the image is not rendered before all
+            # commands have been submitted
+            signal_semaphore_count=1,
+            signal_semaphores=pointer(self.render_semaphores['render']),
+
+            # Submit the currently active command buffer
+            command_buffer_count=1, 
+            command_buffers=pointer(drawbuf)
+        )
+
+        #Submit to the graphics queue
+        assert(self.QueueSubmit(self.queue, 1, byref(submit_info), vk.Fence(0)) == vk.SUCCESS)
+        assert( self.QueueWaitIdle(self.queue) == vk.SUCCESS)
+
+        # Present the current buffer to the swap chain
+		# We pass the signal semaphore from the submit info
+		# to ensure that the image is not rendered until
+		# all commands have been submitted
+        present_info = vk.PresentInfoKHR(
+            s_type=vk.STRUCTURE_TYPE_PRESENT_INFO_KHR, next=vk.NULL,
+            swapchain_count=1, swapchains=pointer(self.swapchain.swapchain),
+            image_indices = pointer(current_buffer),
+            wait_semaphores = pointer(self.render_semaphores['render']),
+            wait_semaphore_count=1
+        )
+        
+        result = self.QueuePresentKHR(self.queue, byref(present_info));
+        if result != vk.SUCCESS:
+            raise "Could not render the scene"
+
+
     async def render(self):
         """
             Render the scene
         """
+        print("Running!")
         import time
-        print('Running!')
         loop = asyncio.get_event_loop()
         frame_counter = 0
         fps_timer = 0.0
+        self.running = True
 
-        while True:
+        while self.running:
             t_start = loop.time()
 
             # draw
-            time.sleep(0.001)
+            self.DeviceWaitIdle(self.device)
+            self.draw()
+            time.sleep(1)
+            self.DeviceWaitIdle(self.device)
 
             frame_counter += 1
             t_end = loop.time()
@@ -1445,6 +1520,8 @@ class TriangleApplication(Application):
             await asyncio.sleep(0)
         
 
+        self.rendering_done.set()
+
     def __init__(self):
         Application.__init__(self)
 
@@ -1455,7 +1532,7 @@ class TriangleApplication(Application):
         self.descriptor_pool = None
         self.render_semaphores = {'present': None, 'render': None}
         self.matrices = (Mat4*3)(Mat4(), Mat4(), Mat4()) # 0: Projection, 1: Model, 2: View
-        
+
         self.uniform_data = {
             'buffer': vk.Buffer(0),
             'memory': vk.DeviceMemory(0),
@@ -1479,7 +1556,7 @@ class TriangleApplication(Application):
         self.create_pipeline()
         self.create_descriptor_pool()
         self.create_descriptor_set()
-        self.create_command_buffers()
+        self.init_command_buffers()
 
     def __del__(self):
 

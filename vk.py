@@ -539,6 +539,7 @@ STRUCTURE_TYPE_MEMORY_BARRIER = 46
 STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = 47
 STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = 48
 STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000
+STRUCTURE_TYPE_PRESENT_INFO_KHR = 1000001001
 STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000
 STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT = 1000011000
 STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT = 1000011000
@@ -1232,6 +1233,13 @@ define_structure('WriteDescriptorSet',
     ('texel_buffer_view', c_void_p)
 )
 
+define_structure('PresentInfoKHR',
+    ('s_type', c_uint), ('next', c_void_p), ('wait_semaphore_count', c_uint),
+    ('wait_semaphores', POINTER(Semaphore)), ('swapchain_count', c_uint),
+    ('swapchains', POINTER(SwapchainKHR)), ('image_indices', POINTER(c_uint)),
+    ('results', POINTER(c_uint))
+)
+
 del mod
 
 ### INSTANCE FUNCTIONS ###
@@ -1322,6 +1330,9 @@ DEVICE_FUNCTIONS = (
     (b'vkCmdBindVertexBuffers', None, CommandBuffer, c_uint, c_uint, POINTER(Buffer), POINTER(c_ulonglong)),
     (b'vkCmdBindIndexBuffer', None, CommandBuffer, Buffer, c_ulonglong, c_uint),
     (b'vkCmdDrawIndexed', None, CommandBuffer, c_uint, c_uint, c_uint, c_int, c_uint),
+    (b'vkDeviceWaitIdle', c_uint, Device),
+    (b'vkAcquireNextImageKHR', c_uint, Device, SwapchainKHR, c_ulonglong, Semaphore, Fence, POINTER(c_uint)),
+    (b'vkQueuePresentKHR', c_uint, Queue, POINTER(PresentInfoKHR)),
     
 )
 
