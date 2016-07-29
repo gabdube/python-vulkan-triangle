@@ -435,6 +435,7 @@ class Application(object):
         # them each frame, we use one per frame buffer
         image_count = len(self.swapchain.images)
         draw_buffers = (vk.CommandBuffer*image_count)()
+        post_present_buffers = (vk.CommandBuffer*image_count)()
 
         alloc_info = vk.CommandBufferAllocateInfo(
             s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=vk.NULL,
@@ -448,6 +449,13 @@ class Application(object):
             self.draw_buffers = draw_buffers
         else:
             raise RuntimeError('Failed to drawing buffers')
+
+
+        result = self.AllocateCommandBuffers(self.device, byref(alloc_info), cast(post_present_buffers, POINTER(vk.CommandBuffer)))
+        if result == vk.SUCCESS:
+            self.post_present_buffers = post_present_buffers
+        else:
+            raise RuntimeError('Failed to present buffers')
     
     def create_depth_stencil(self):
         width, height = self.window.dimensions()
@@ -763,6 +771,7 @@ class Application(object):
         self.cmd_pool = None
         self.setup_buffer = None
         self.draw_buffers = []  
+        self.post_present_buffers = []
         self.render_pass = None
         self.pipeline_cache = None
         self.framebuffers = None
@@ -802,6 +811,7 @@ class Application(object):
             len_draw_buffers = len(self.draw_buffers)
             if len_draw_buffers > 0:
                 self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
+                self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.post_present_buffers, POINTER(vk.CommandBuffer)))
 
             if self.render_pass is not None:
                 self.DestroyRenderPass(self.device, self.render_pass, vk.NULL)
@@ -1305,7 +1315,7 @@ class TriangleApplication(Application):
         )
 
         clear_values = (vk.ClearValue*2)()
-        clear_values.color = (c_float*4)(1.0, 0.0, 0.0, 1.0)
+        clear_values.color = (c_float*4)(0.0, 0.0, 1.0, 1.0)
         clear_values.depth_stencil = vk.ClearDepthStencilValue(depth=1.0, stencil=0)
 
         width, height = self.window.dimensions()
@@ -1319,6 +1329,37 @@ class TriangleApplication(Application):
             clear_value_count=2, 
             clear_values = cast(clear_values, POINTER(vk.ClearValue))
         )
+
+        for index, cmdbuf in enumerate(self.post_present_buffers):
+            assert(self.BeginCommandBuffer(cmdbuf, byref(begin_info)) == vk.SUCCESS)
+
+            subres = vk.ImageSubresourceRange(
+                aspect_mask=vk.IMAGE_ASPECT_COLOR_BIT, base_mip_level=0,
+                level_count=1, base_array_layer=0, layer_count=1,
+            )
+
+            barrier = vk.ImageMemoryBarrier(
+                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL,
+                src_access_mask=0,
+                dst_access_mask=vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                old_layout=vk.IMAGE_LAYOUT_PRESENT_SRC_KHR,
+                new_layout=vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+                src_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+                dst_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
+                image=self.swapchain.images[index], 
+                subresource_range=subres
+            )
+
+            self.CmdPipelineBarrier(
+				cmdbuf, 
+				vk.PIPELINE_STAGE_ALL_COMMANDS_BIT, 
+				vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+				0,
+				0, vk.NULL,
+				0, vk.NULL,
+				1, byref(barrier));
+
+            assert(self.EndCommandBuffer(cmdbuf) == vk.SUCCESS)
 
         for index, cmdbuf in enumerate(self.draw_buffers):
             assert(self.BeginCommandBuffer(cmdbuf, byref(begin_info)) == vk.SUCCESS)
@@ -1337,21 +1378,7 @@ class TriangleApplication(Application):
             scissor = render_area
             self.CmdSetScissor(cmdbuf, 0, 1, byref(scissor))
 
-            # Bind descriptor sets describing shader binding points
-            self.CmdBindDescriptorSets(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, byref(self.descriptor_set), 0, vk.NULL)
-
-            # Bind the rendering pipeline (including the shaders)
-            self.CmdBindPipeline(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline)
-
-            # Bind triangle vertices
-            offsets = vk.c_ulonglong(0)
-            self.CmdBindVertexBuffers(cmdbuf, self.VERTEX_BUFFER_BIND_ID, 1, byref(self.triangle['buffer']), byref(offsets))
-
-            # Bind triangle indices
-            self.CmdBindIndexBuffer(cmdbuf, self.triangle['indices_buffer'], 0, vk.INDEX_TYPE_UINT32)
-
-            # Draw indexed triangle
-            self.CmdDrawIndexed(cmdbuf, 3, 1, 0, 0, 1)
+            self.CmdEndRenderPass(cmdbuf)
 
             # Add a present memory barrier to the end of the command buffer
 			# This will transform the frame buffer color attachment to a
@@ -1372,32 +1399,17 @@ class TriangleApplication(Application):
                 image=self.swapchain.images[index], 
                 subresource_range=subres
             )
+
+            self.CmdPipelineBarrier(
+				cmdbuf, 
+				vk.PIPELINE_STAGE_ALL_COMMANDS_BIT, 
+				vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+				0,
+				0, vk.NULL,
+				0, vk.NULL,
+				1, byref(barrier));
+
             
-            self.CmdPipelineBarrier(
-                cmdbuf,
-                vk.PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-                0,
-                0, vk.NULL,
-                0, vk.NULL,
-                1, byref(barrier)
-            )
-
-            barrier.src_access_mask = vk.ACCESS_MEMORY_READ_BIT
-            barrier.dst_access_mask = vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-            barrier.old_layout = vk.IMAGE_LAYOUT_PRESENT_SRC_KHR
-            barrier.new_layout = vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-            self.CmdPipelineBarrier(
-                cmdbuf,
-                vk.PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                0,
-                0, vk.NULL,
-                0, vk.NULL,
-                1, byref(barrier)
-            )
-
-            self.CmdEndRenderPass(cmdbuf)
             assert(self.EndCommandBuffer(cmdbuf) == vk.SUCCESS)
 
     def update_uniform_buffers(self):
@@ -1439,8 +1451,16 @@ class TriangleApplication(Application):
             raise Exception("Could not aquire next image from swapchain")
 
         cb = current_buffer.value
-        print("Sending image {}".format(hex(self.swapchain.images[cb])))
 
+        prebuf = vk.CommandBuffer(self.post_present_buffers[cb])
+        submit_info = vk.SubmitInfo(
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO,
+            command_buffer_count=1,
+            command_buffers=pointer(prebuf)
+        )
+        assert(self.QueueSubmit(self.queue, 1, byref(submit_info), vk.Fence(0)) == vk.SUCCESS)
+        assert(self.QueueWaitIdle(self.queue) == vk.SUCCESS)
+        
         # The submit information structure contains a list of
 		# command buffers and semaphores to be submitted to a queue
 		# If you want to submit multiple command buffers, pass an array
@@ -1468,7 +1488,6 @@ class TriangleApplication(Application):
 
         #Submit to the graphics queue
         assert(self.QueueSubmit(self.queue, 1, byref(submit_info), vk.Fence(0)) == vk.SUCCESS)
-        assert( self.QueueWaitIdle(self.queue) == vk.SUCCESS)
 
         # Present the current buffer to the swap chain
 		# We pass the signal semaphore from the submit info
@@ -1492,7 +1511,6 @@ class TriangleApplication(Application):
             Render the scene
         """
         print("Running!")
-        import time
         loop = asyncio.get_event_loop()
         frame_counter = 0
         fps_timer = 0.0
@@ -1504,7 +1522,6 @@ class TriangleApplication(Application):
             # draw
             self.DeviceWaitIdle(self.device)
             self.draw()
-            time.sleep(1)
             self.DeviceWaitIdle(self.device)
 
             frame_counter += 1
