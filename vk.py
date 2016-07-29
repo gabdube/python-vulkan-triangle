@@ -1049,7 +1049,7 @@ define_structure('BufferCopy',
 )
 
 define_structure('VertexInputBindingDescription',
-    ('binding', c_uint), ('sride', c_uint), ('input_date', c_uint)
+    ('binding', c_uint), ('stride', c_uint), ('input_date', c_uint)
 )
 
 define_structure('VertexInputAttributeDescription',

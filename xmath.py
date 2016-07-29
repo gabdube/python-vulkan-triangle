@@ -38,7 +38,7 @@ tupleize = lambda l: tuple([tuple(i) for i in l])
 def perspective(fov, aspect, z_near, z_far):
     tan_half_fov = tan(radians(fov)/2)
 
-    result = deepcopy(identity)
+    result = [[0,0,0,0], [0,0,0,0], [0,0,0,0], [0,0,0,0]]
     result[0][0] = 1/(aspect*tan_half_fov)
     result[1][1] = 1/(tan_half_fov)
     result[2][3] = -1

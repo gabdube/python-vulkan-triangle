@@ -750,7 +750,7 @@ class Application(object):
 
     def __init__(self):
         self.running = False
-        self.zoom = 0.0                # Scene zoom
+        self.zoom = -2.5               # Scene zoom
         self.rotation = (c_float*3)()  # Scene rotation
         self.shaders_modules = []      # A list of compiled shaders. GC'ed with the application
         self.debugger = Debugger(self) # Throw errors if validations layers are activated
@@ -876,6 +876,7 @@ class TriangleApplication(Application):
         bindings[0].binding = self.VERTEX_BUFFER_BIND_ID
         bindings[0].stride = vk.sizeof(Vertex)
         bindings[0].input_rate = vk.VERTEX_INPUT_RATE_VERTEX
+        
 
         # Attribute descriptions
 		# Describes memory layout and shader attribute locations
@@ -914,7 +915,7 @@ class TriangleApplication(Application):
 
         # Setup indices
         indices_data = (c_uint*3)(0,1,2)
-        indices_size = vk.sizeof(c_uint)*3
+        indices_size = vk.sizeof(indices_data)
 
         #
         # Store the vertices in the device memory
@@ -947,7 +948,8 @@ class TriangleApplication(Application):
         result = self.MapMemory(self.device, vertex['memory'], 0, memalloc.allocation_size, 0, byref(data))
         if result != vk.SUCCESS:
             raise 'Could not map memory to local'
-        vk.memmove(vertices_data, data, vertices_size)
+        vk.memmove(data, vertices_data, vertices_size)
+        x = cast(data, POINTER(c_float))
         self.UnmapMemory(self.device, vertex['memory'])
 
         # 5 Bind the memory and the buffer together
@@ -987,7 +989,7 @@ class TriangleApplication(Application):
         memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
         assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(indices['memory'])) == vk.SUCCESS)
         assert(self.MapMemory(self.device, indices['memory'], 0, indices_size, 0, byref(data)) == vk.SUCCESS)
-        vk.memmove(vertices_data, data, vertices_size)
+        vk.memmove(data , indices_data, indices_size)
         self.UnmapMemory(self.device, indices['memory'])
         assert(self.BindBufferMemory(self.device, indices['buffer'], indices['memory'], 0) == vk.SUCCESS)
         
@@ -1315,8 +1317,8 @@ class TriangleApplication(Application):
         )
 
         clear_values = (vk.ClearValue*2)()
-        clear_values.color = (c_float*4)(0.0, 0.0, 1.0, 1.0)
-        clear_values.depth_stencil = vk.ClearDepthStencilValue(depth=1.0, stencil=0)
+        clear_values[0].color = vk.ClearColorValue((c_float*4)(0.1, 0.1, 0.1, 1.0))
+        clear_values[1].depth_stencil = vk.ClearDepthStencilValue(depth=1.0, stencil=0)
 
         width, height = self.window.dimensions()
         render_area = vk.Rect2D(
@@ -1378,6 +1380,22 @@ class TriangleApplication(Application):
             scissor = render_area
             self.CmdSetScissor(cmdbuf, 0, 1, byref(scissor))
 
+            # Bind descriptor sets describing shader binding points
+            self.CmdBindDescriptorSets(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, byref(self.descriptor_set), 0, vk.NULL)
+
+            # Bind the rendering pipeline (including the shaders)
+            self.CmdBindPipeline(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline)
+
+            # Bind triangle vertices
+            offsets = vk.c_ulonglong(0)
+            self.CmdBindVertexBuffers(cmdbuf, self.VERTEX_BUFFER_BIND_ID, 1, byref(self.triangle['buffer']), byref(offsets))
+
+            # Bind triangle indices
+            self.CmdBindIndexBuffer(cmdbuf, self.triangle['indices_buffer'], 0, vk.INDEX_TYPE_UINT32)
+
+            # Draw indexed triangle
+            self.CmdDrawIndexed(cmdbuf, 3, 1, 0, 0, 1)
+
             self.CmdEndRenderPass(cmdbuf)
 
             # Add a present memory barrier to the end of the command buffer
@@ -1420,19 +1438,20 @@ class TriangleApplication(Application):
         width, height = self.window.dimensions()
         self.matrices[0].set_data(perspective(60.0, width/height, 0.1, 256.0))
 
-        # View
-        self.matrices[1].set_data(translate(None, (0.0, 0.0, self.zoom)))
-
         # Model
         mod_mat = rotate(None, self.rotation[0], (1.0, 0.0, 0.0))
         mod_mat = rotate(mod_mat, self.rotation[1], (0.0, 1.0, 0.0))
-        self.matrices[2].set_data(rotate(mod_mat, self.rotation[2], (0.0, 0.0, 1.0)))
+        self.matrices[1].set_data(rotate(mod_mat, self.rotation[2], (0.0, 0.0, 1.0)))
+
+        # View
+        self.matrices[2].set_data(translate(None, (0.0, 0.0, self.zoom)))
+
 
         self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
-        vk.memmove(self.matrices, data, matsize)
+        vk.memmove(data, self.matrices, matsize)
         self.UnmapMemory(self.device, self.uniform_data['memory'])
 
-    
+
     def run(self):
         """
             Add the render phase to the asyncio loop
@@ -1511,6 +1530,7 @@ class TriangleApplication(Application):
             Render the scene
         """
         print("Running!")
+        import time
         loop = asyncio.get_event_loop()
         frame_counter = 0
         fps_timer = 0.0
@@ -1522,6 +1542,7 @@ class TriangleApplication(Application):
             # draw
             self.DeviceWaitIdle(self.device)
             self.draw()
+            time.sleep(1/30)
             self.DeviceWaitIdle(self.device)
 
             frame_counter += 1
