@@ -236,7 +236,7 @@ class Win32Window(object):
             "Python vulkan test",
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
             CW_USEDEFAULT, CW_USEDEFAULT,
-            500, 500,
+            1280, 720,
             NULL, NULL, mod, NULL
         )
 
