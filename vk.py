@@ -6,6 +6,9 @@
 from ctypes import *
 from sys import modules
 
+# Whether to enable validation layer or not
+ENABLE_VALIDATION = False
+
 ### NON VULKAN VALUES ###
 
 NULL = c_void_p(0)
@@ -1342,8 +1345,12 @@ def load_functions(owner, obj, functions_list, loader):
     """
     for name, return_type, *args in functions_list:
         py_name = name.decode()[2::]
-        fn = (CFUNCTYPE(return_type, *args))(loader(obj, name))
-        setattr(owner, py_name, fn)
+        _fn_ptr = loader(obj, name)
+        if _fn_ptr is not None:
+            fn = (CFUNCTYPE(return_type, *args))(_fn_ptr)
+            setattr(owner, py_name, fn)
+        else:
+            print('Could not load function {}'.format(py_name))
 
 def load_instance_functions(owner, instance):
     load_functions(owner, instance, INSTANCE_FUNCTIONS, GetInstanceProcAddr)

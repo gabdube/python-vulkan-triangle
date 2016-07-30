@@ -65,7 +65,6 @@ def translate(mat=None, vec=(0.0, 0.0, 0.0)):
 
     return tupleize(result)
 
-@lru_cache(maxsize=16)
 def rotate(mat=None, angle=0, vec=(0.0, 0.0, 0.0)):
     mat = mat or deepcopy(identity)
     a = radians(angle)

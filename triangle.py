@@ -24,7 +24,7 @@ else:
     raise OSError("Platform not supported")
 
 # Whether to enable validation layer or not
-ENABLE_VALIDATION = True
+ENABLE_VALIDATION = False
 
 class Vertex(Structure):
     _fields_ = (('pos', c_float*3), ('col', c_float*3))
@@ -157,11 +157,13 @@ class Swapchain(BaseSwapchain):
             image_sharing_mode=vk.SHARING_MODE_EXCLUSIVE, queue_family_index_count=0,
             queue_family_indices=cast(vk.NULL, POINTER(c_uint)), pre_transform=transform, 
             composite_alpha=vk.COMPOSITE_ALPHA_OPAQUE_BIT_KHR, present_mode=present_mode,
-            clipped=1, old_swapchain=vk.SwapchainKHR(0)
+            clipped=1,
+            old_swapchain=(self.swapchain or vk.SwapchainKHR(0))
         )
 
         swapchain = vk.SwapchainKHR(0)
         result = app.CreateSwapchainKHR(app.device, byref(create_info), vk.NULL, byref(swapchain))
+        
         if result == vk.SUCCESS:
             if self.swapchain is not None: #Destroy the old swapchain if it exists
                 self.destroy_swapchain()
@@ -416,6 +418,10 @@ class Application(object):
             next=vk.NULL, flags= 0, inheritance_info=vk.NULL
         )
 
+        if self.setup_buffer is not None:
+            self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(self.setup_buffer))
+            self.setup_buffer = None
+
         buffer = vk.CommandBuffer(0)
         result = self.AllocateCommandBuffers(self.device, byref(create_info), byref(buffer))
         if result == vk.SUCCESS:
@@ -605,7 +611,7 @@ class Application(object):
 
         self.pipeline_cache = pipeline_cache
 
-    def create_framebuffer(self):
+    def create_framebuffers(self):
         attachments = cast((vk.ImageView*2)(), POINTER(vk.ImageView))
         attachments[1] = self.depth_stencil['view']
         
@@ -748,6 +754,31 @@ class Application(object):
         self.shaders_modules.append(module)
         return shader_info
 
+    def resize_display(self, width, height):
+        self.create_setup_buffer()
+
+        # Recreate the swap chain
+        self.swapchain.create()
+
+        # Recreate the frame buffers
+        self.DestroyImageView(self.device, self.depth_stencil['view'], vk.NULL)
+        self.DestroyImage(self.device, self.depth_stencil['image'], vk.NULL)
+        self.FreeMemory(self.device, self.depth_stencil['mem'], vk.NULL)
+        self.create_depth_stencil()
+
+        for fb in self.framebuffers:
+            self.DestroyFramebuffer(self.device, fb, vk.NULL)
+        self.create_framebuffers()
+
+        self.flush_setup_buffer()
+
+        # Command buffers need to be recreated as they may store
+	    # references to the recreated frame buffer
+        len_draw_buffers = len(self.draw_buffers)
+        self.FreeCommandBuffers(self.device, self.cmd_pool, len_draw_buffers, cast(self.draw_buffers, POINTER(vk.CommandBuffer)))
+        self.FreeCommandBuffers(self.device, self.cmd_pool, len_draw_buffers, cast(self.post_present_buffers, POINTER(vk.CommandBuffer)))
+        self.create_command_buffers()
+
     def __init__(self):
         self.running = False
         self.zoom = -2.5               # Scene zoom
@@ -790,7 +821,7 @@ class Application(object):
         self.create_depth_stencil()
         self.create_renderpass()
         self.create_pipeline_cache()
-        self.create_framebuffer()
+        self.create_framebuffers()
         self.flush_setup_buffer()
 
 
@@ -1451,6 +1482,14 @@ class TriangleApplication(Application):
         vk.memmove(data, self.matrices, matsize)
         self.UnmapMemory(self.device, self.uniform_data['memory'])
 
+    def resize_display(self, width, height):
+        Application.resize_display(self, width, height)
+
+        self.init_command_buffers()
+        self.QueueWaitIdle(self.queue)
+        self.DeviceWaitIdle(self.device)
+
+        self.update_uniform_buffers()
 
     def run(self):
         """
@@ -1542,9 +1581,9 @@ class TriangleApplication(Application):
             # draw
             self.DeviceWaitIdle(self.device)
             self.draw()
-            time.sleep(1/30)
             self.DeviceWaitIdle(self.device)
-
+            #time.sleep(1/30)
+            
             frame_counter += 1
             t_end = loop.time()
             delta = t_end-t_start

@@ -28,6 +28,15 @@ IDC_ARROW = LPCWSTR(32512)
 WM_CREATE = 0x0001
 WM_CLOSE = 0x0010
 WM_QUIT = 0x0012
+WM_MOUSEWHEEL = 0x020A
+WM_RBUTTONDOWN = 0x0204
+WM_LBUTTONDOWN = 0x0201
+WM_MOUSEMOVE = 0x0200
+WM_SIZE = 0x0005
+WM_EXITSIZEMOVE = 0x0232
+
+MK_RBUTTON = 0x0002
+MK_LBUTTON = 0x0001
 
 WS_CLIPCHILDREN = 0x02000000
 WS_CLIPSIBLINGS = 0x04000000
@@ -120,17 +129,53 @@ SetWindowTextW.argtypes = (HWND, LPCWSTR)
 
 ################
 
+mouse_pos = (0, 0)
+resize_target = (0, 0)
+
 def wndproc(window, hwnd, msg, w, l):
+    global mouse_pos, resize_target
+
+    if msg == WM_MOUSEMOVE:
+        app = window.app()
+        x, y = float(c_short(l).value), float(c_short(l>>16).value)
+        if w & MK_RBUTTON:
+            app.zoom += (mouse_pos[1] - float(y)) * 0.005
+        elif w & MK_LBUTTON:
+            app.rotation[0] += (mouse_pos[1] - float(y)) * 1.25
+            app.rotation[1] += (mouse_pos[0] - float(x)) * 1.25
+
+        mouse_pos = (x,y)
+        app.update_uniform_buffers()
+
+    elif msg in (WM_RBUTTONDOWN, WM_LBUTTONDOWN):
+        x, y = float(c_short(l).value), float(c_short(l>>16).value)
+        mouse_pos = (x,y)
+
+    elif msg == WM_MOUSEWHEEL:
+        app = window.app()
+        wheel_delta = float(c_short(w>>16).value)
+        app.zoom += wheel_delta*0.002
+        app.update_uniform_buffers()
+
+    if msg == WM_SIZE:
+        resize_target = c_short(l).value, c_short(l>>16).value
+
+    elif msg == WM_EXITSIZEMOVE:
+        window.app().resize_display(*resize_target)
+
     if msg == WM_CREATE:
-        return 0
+        pass
+
     elif msg == WM_CLOSE:
         DestroyWindow(hwnd)
         window.__hwnd = None
         window.app().running = False  # Stop the rendering loop of the app
         PostQuitMessage(0)
-        return 0
+
     else:
         return DefWindowProcW(hwnd, msg, w, l)
+
+    return 0
 
 async def process_events(app):
     """
@@ -146,8 +191,8 @@ async def process_events(app):
 
         await asyncio.sleep(1/30)
 
-    # Wait til app rendering is done before exiting the loop
-    # Otherwise, the loop owns a ref of the app and therefore, it cannot be freed.
+    # Wait til the app rendering is done before exiting the loop
+    # Otherwise, the loop owns a ref of the app and therefore, the app cannot be freed.
     app = app()
     if app is not None:
         await app.rendering_done.wait()
@@ -191,7 +236,7 @@ class Win32Window(object):
             "Python vulkan test",
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
             CW_USEDEFAULT, CW_USEDEFAULT,
-            1280, 720,
+            500, 500,
             NULL, NULL, mod, NULL
         )
 
