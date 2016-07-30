@@ -2,7 +2,7 @@
 
 This project use python and vulkan to draw a triangle in a window using ctypes for bindings.  
 The program is stand-alone, you don't have to install anything.  
-It was tested on Windows 10 and Ubuntu 16.04 LTS using a R9 380, windows 10 using a A-10-7300 Radeon R6 (integrated GPU). All configuration using the kastest available drivers.
+It was tested on Windows 10 and windows 10 using a A-10-7300 Radeon R6 (an APU). All configuration are using the lastest available drivers.
 
 To run the program, simple call  
 `python triangle.py`
