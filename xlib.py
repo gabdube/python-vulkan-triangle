@@ -9,8 +9,9 @@ from ctypes import *
 # Extern libraries
 try:
     xcb = cdll.LoadLibrary('libxcb.so')
+    libc = cdll.LoadLibrary("libc.so.6")
 except OSError:
-    raise OSError("Failed to import libxcb.so. Is it installed?")
+    raise OSError("Failed to import libxcb.so or libc. Is it installed?")
 
 # TYPES
 xcb_connection_t = c_void_p
@@ -18,6 +19,7 @@ xcb_setup_t = c_void_p
 xcb_window_t = c_uint
 xcb_colormap_t = c_uint
 xcb_visualid_t = c_uint
+xcb_drawable_t = c_uint
 
 # Structures
 class xcb_screen_t(Structure):
@@ -35,6 +37,27 @@ class xcb_screen_t(Structure):
         ('root_depth', c_ubyte), ('allowed_depths_len', c_ubyte)
     )
 
+class xcb_get_geometry_reply_t(Structure):
+    _fields_ = (
+        ('response_type', c_ubyte),
+        ('depth', c_ubyte),
+        ('sequence', c_ushort),
+        ('length', c_uint),
+        ('root', xcb_window_t),
+        ('x', c_short), ('y', c_short),
+        ('width', c_ushort), ('height', c_ushort),
+        ('border_width', c_ushort)
+    )
+
+class xcb_generic_event_t(Structure):
+    _fields_ = (
+        ('response_type', c_ubyte),
+        ('pad0', c_ubyte),
+        ('sequence', c_ushort),
+        ('pad', c_uint*7),
+        ('full_sequence', c_uint),
+    )
+
 class xcb_screen_iterator_t(Structure):
     _fields_ = (
         ('data', POINTER(xcb_screen_t)),
@@ -45,6 +68,7 @@ class xcb_screen_iterator_t(Structure):
 class xcb_void_cookie_t(Structure):
     _fields_ = (('sequence', c_uint),)
 
+xcb_get_geometry_cookie_t = xcb_void_cookie_t
 
 # CONSTS
 
@@ -64,6 +88,8 @@ XCB_EVENT_MASK_BUTTON_RELEASE = 2
 XCB_COPY_FROM_PARENT = 0
 
 XCB_WINDOW_CLASS_INPUT_OUTPUT = 1
+
+XCB_DESTROY_NOTIFY = 17
 
 # Functions
 
@@ -110,9 +136,38 @@ xcb_flush = xcb.xcb_flush
 xcb_flush.restype = c_int
 xcb_flush.argtypes = (xcb_connection_t,)
 
-async def process_events():
+xcb_get_geometry = xcb.xcb_get_geometry
+xcb_get_geometry.restype = xcb_get_geometry_cookie_t
+xcb_get_geometry.argtypes = (xcb_connection_t, xcb_drawable_t)
+
+xcb_get_geometry_reply = xcb.xcb_get_geometry_reply
+xcb_get_geometry_reply.restype = POINTER(xcb_get_geometry_reply_t)
+xcb_get_geometry_reply.argtypes = (xcb_connection_t, xcb_get_geometry_cookie_t, c_void_p)
+
+xcb_poll_for_event = xcb.xcb_poll_for_event
+xcb_poll_for_event.restype = POINTER(xcb_generic_event_t)
+xcb_poll_for_event.argtypes = (xcb_connection_t,)
+
+free = libc.free
+free.restype = None
+free.argtypes = (c_void_p,)
+
+def handle_event(event):
+    evt = event.response_type & 0x7f
+
+    if evt == XCB_DESTROY_NOTIFY:
+        return False
+
+    return True
+
+async def process_events(window):
     listen_events = True
     while listen_events:
+        event = xcb_poll_for_event(window.connection)
+        if event.value != 0:
+            listen_events = handle_event(event.contents)
+            free(event)
+
         await asyncio.sleep(1/30)
 
     asyncio.get_event_loop().stop()
@@ -153,18 +208,31 @@ class XlibWindow(object):
             cast(value_list, c_void_p)
         )
 
-
-        xcb_map_window(connection, window)
-
         self.window = window
         self.connection = connection
 
-        xcb_flush(self.connection)
-        asyncio.ensure_future(process_events())
+        asyncio.ensure_future(process_events(self))
 
     def __del__(self):
         xcb_destroy_window(self.connection, self.window)
         xcb_disconnect(self.connection)
+
+    def dimensions(self):
+        cookie = xcb_get_geometry(self.connection, self.window)
+        geo = xcb_get_geometry_reply(self.connection, cookie, NULL)
+        geo = geo.contents
+        return (geo.width, geo.height)
+
+    def show(self):
+        xcb_map_window(self.connection, self.window)
+        xcb_flush(self.connection)
+
+    def set_title(self, title):
+        return #TODO
+        title = c_wchar_p(title)
+        SetWindowTextW(self.__hwnd, title)
+
+
 
 class XlibSwapchain(object):
     

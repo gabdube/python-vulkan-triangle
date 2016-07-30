@@ -727,7 +727,7 @@ class Application(object):
 
     def load_shader(self, name, stage):
         # Read the shader data
-        path = '{}/shaders/{}'.format(dirname(__file__), name)
+        path = './shaders/{}'.format(name)
         shader_f = open(path, 'rb')
         shader_bin = shader_f.read()
         shader_bin_size = len(shader_bin)
