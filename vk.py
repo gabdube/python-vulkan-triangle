@@ -543,9 +543,11 @@ STRUCTURE_TYPE_LOADER_INSTANCE_CREATE_INFO = 47
 STRUCTURE_TYPE_LOADER_DEVICE_CREATE_INFO = 48
 STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR = 1000001000
 STRUCTURE_TYPE_PRESENT_INFO_KHR = 1000001001
+STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR = 1000005000
 STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000
 STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT = 1000011000
 STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT = 1000011000
+
 
 # VkSubpassContents
 SUBPASS_CONTENTS_INLINE = 0
@@ -907,6 +909,11 @@ define_structure('DeviceCreateInfo',
 define_structure('Win32SurfaceCreateInfoKHR',
     ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('hinstance', c_void_p),
     ('hwnd', c_void_p)
+)
+
+define_structure('XcbSurfaceCreateInfoKHR',
+    ('s_type', c_uint), ('next', c_void_p), ('flags', c_uint), ('connection', c_void_p),
+    ('window', c_uint)
 )
 
 define_structure('CommandPoolCreateInfo',
@@ -1275,6 +1282,7 @@ INSTANCE_FUNCTIONS = (
     (b'vkCreateDebugReportCallbackEXT', c_uint, Instance, POINTER(DebugReportCallbackCreateInfoEXT), c_void_p, POINTER(DebugReportCallbackEXT)),
     (b'vkDestroyDebugReportCallbackEXT', None, Instance, DebugReportCallbackEXT, c_void_p),
     (b'vkDebugReportMessageEXT', None, Instance, c_uint, c_uint, c_ulonglong, c_size_t, c_int, c_char_p, c_char_p),
+    (b'vkCreateXcbSurfaceKHR', c_uint, Instance, POINTER(XcbSurfaceCreateInfoKHR), c_void_p, POINTER(SurfaceKHR)),
 )
 
 DEVICE_FUNCTIONS = (

@@ -1,8 +1,8 @@
 """
     Minimalistic wrapper over the XLIB window api
 """
-
-import weakref
+import vk
+import weakref, asyncio
 
 from ctypes import *
 
@@ -48,7 +48,8 @@ class xcb_void_cookie_t(Structure):
 
 # CONSTS
 
-NULL_STR = cast(c_void_p(0), POINTER(c_char))
+NULL = c_void_p(0)
+NULL_STR = cast(NULL, POINTER(c_char))
 
 XCB_CW_BACK_PIXEL = 2
 XCB_CW_EVENT_MASK = 2048
@@ -105,6 +106,17 @@ xcb_destroy_window = xcb.xcb_destroy_window
 xcb_destroy_window.restype = xcb_void_cookie_t
 xcb_destroy_window.argtypes = (xcb_connection_t, xcb_window_t)
 
+xcb_flush = xcb.xcb_flush
+xcb_flush.restype = c_int
+xcb_flush.argtypes = (xcb_connection_t,)
+
+async def process_events():
+    listen_events = True
+    while listen_events:
+        await asyncio.sleep(1/30)
+
+    asyncio.get_event_loop().stop()
+    
 class XlibWindow(object):
     
     def __init__(self, app):
@@ -144,17 +156,36 @@ class XlibWindow(object):
 
         xcb_map_window(connection, window)
 
-        self.__window = window
-        self.__connection = connection;
+        self.window = window
+        self.connection = connection
+
+        xcb_flush(self.connection)
+        asyncio.ensure_future(process_events())
 
     def __del__(self):
-        xcb_destroy_window(self.__connection, self.__window)
-        xcb_disconnect(self.__connection)
+        xcb_destroy_window(self.connection, self.window)
+        xcb_disconnect(self.connection)
 
 class XlibSwapchain(object):
     
     def create_surface(self):
-        pass
+        """
+            Create a surface for the window
+        """
+        app = self.app()
+
+        surface = vk.SurfaceKHR(0)
+        surface_info = vk.XcbSurfaceCreateInfoKHR(
+            s_type = vk.STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+            next= vk.NULL, flags=0, connection=app.window.connection,
+            window=app.window.window
+        )
+
+        result = app.CreateXcbSurfaceKHR(app.instance, byref(surface_info), NULL, byref(surface))
+        if result == vk.SUCCESS:
+            self.surface = surface
+        else:
+            raise RuntimeError("Failed to create surface")
     
     def __init__(self, app):
         self.app = weakref.ref(app)
