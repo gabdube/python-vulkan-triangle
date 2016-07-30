@@ -9,7 +9,14 @@ To run the program, simple call
 
 The program is kind of a port of the vulkan example by Sascha Willems (at <https://github.com/SaschaWillems/Vulkan> ). All credits to him.
 
-## Its not over
+## Requirements
+
+Python 3.5 (I use asyncio to handle the system events and the rendering phase asynchronously)
+The latest Vulkan driver
+Windows **or** Linux (soon)
+XCB (only for linux)
+
+## It's not over
 
 I still need to code the window for linux and create a good wrapper generator for python. I might also try to use a C extension to run the render loop before jumping to something more advanced.
 
