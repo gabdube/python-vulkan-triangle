@@ -100,6 +100,9 @@ XCB_COPY_FROM_PARENT = 0
 
 XCB_PROP_MODE_REPLACE = 0
 
+XCB_ATOM_STRING = 31
+XCB_ATOM_WM_NAME = 39
+
 XCB_WINDOW_CLASS_INPUT_OUTPUT = 1
 
 XCB_DESTROY_NOTIFY = 17
@@ -183,9 +186,7 @@ free.argtypes = (c_void_p,)
 
 def handle_event(event):
     evt = event.response_type & 0x7f
-    if evt == XCB_CLIENT_MESSAGE:
-        return False
-    elif evt == XCB_DESTROY_NOTIFY:
+    if evt in (XCB_CLIENT_MESSAGE, XCB_DESTROY_NOTIFY):
         return False
 
     return True
@@ -253,15 +254,13 @@ class XlibWindow(object):
         cookie2 = xcb_intern_atom(connection, 0, 16, b'WM_DELETE_WINDOW')
         atom_wm_delete_window = xcb_intern_atom_reply(connection, cookie2, 0)
 
-        print(atom_wm_delete_window.contents.atom)
-
         xcb_change_property(
             connection,
             XCB_PROP_MODE_REPLACE,
-		    window,
+            window,
             reply.contents.atom,
             4, 32, 1,
-		    byref(xcb_atom_t(atom_wm_delete_window.contents.atom))
+            byref(xcb_atom_t(atom_wm_delete_window.contents.atom))
         )
 
         free(reply)
@@ -288,11 +287,16 @@ class XlibWindow(object):
         xcb_flush(self.connection)
 
     def set_title(self, title):
-        return #TODO
-        title = c_wchar_p(title)
-        SetWindowTextW(self.__hwnd, title)
+        title = title.encode()
+        len_title = len(title)
+        ctitle = c_char_p(title)
 
-
+        xcb_change_property(
+            self.connection,
+            XCB_PROP_MODE_REPLACE,
+		    self.window, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8,
+		    len_title, ctitle
+        )
 
 class XlibSwapchain(object):
     

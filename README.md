@@ -13,27 +13,29 @@ The program is kind of a port of the vulkan example by Sascha Willems (at <https
 
 Python 3.5 (I use asyncio to handle the system events and the rendering phase asynchronously)
 The latest Vulkan driver
-Windows **or** Linux (soon)
-XCB (only for linux)
+Windows **or** Linux
+XCB
 
 ## It's not over
 
-I still need to code the window for linux and create a good wrapper generator for python. I might also try to use a C extension to run the render loop before jumping to something more advanced.
+I still need to create a good vulkan wrapper generator for python. I might also try to use a C extension to run the render loop before jumping to something more advanced.
 
 ## Performances
 
 Keep in mind that the program is not a 1:1 copy of the original example.
 
-Windows 10 / R9 380 / i7 3770 @ 3.4 GHZ : ~ 4000 fps (python/no debugger) VS 2700 fps (python debugger on) VS ~4300 fps (c++/Release build)  
-Windows 10 / A-10-7300 Radeon R6 : ~ 750 fps (python/no debugging) VS 750 fps (c++)  (python with debugging enabled do not start)
-Ubuntu 16.04 LTS/ R9 380 / i7 3770 @ 3.4 GHZ : TBD  
+Windows 10 / R9 380 / i7 3770 @ 3.4 GHZ : ~ 4000 fps (python/no debugger) VS 2700 fps (python with debugger) VS ~4300 fps (c++/Release build)  
+Windows 10 / A-10-7300 Radeon R6 : ~ 750 fps (python/no debugging) VS 750 fps (c++)  (shitty laptop too shitty to run python with a debugger)  
+Ubuntu 16.04 LTS/ R9 380 / i7 3770 @ 3.4 GHZ : 4800 (python no debugger) VS 3000 fps (python with debugger) VS SEGFAULT (c++)  
 
 Not much of a suprise, the c++ version is faster, but not my much. Also while the c++ framerate stays relatively stable ~[+-100], the python framerate
  is much less stable ~(+-300). This is mostly due to the GC I guess.  
 
-On my shitty laptop, the python script is as fast as the c++ release build.
+On my shitty laptop, the python script is as fast as the c++ release build.  
 
+Suprise, on ubuntu, the python script is faster than the c++ example on Windows. Sadly, I coudn't test the c++ build as it segfault when I try to run it. :(  
 
 ## Screenshots
 
 ![Alt text](/images/win.png "Image")  
+![Alt text](/images/ubuntu.png "Image")  
