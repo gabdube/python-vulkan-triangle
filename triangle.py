@@ -18,7 +18,6 @@ system_name = platform.system()
 if system_name == 'Windows':
     from win32 import Win32Window as Window, WinSwapchain as BaseSwapchain
 elif system_name == 'Linux':
-
     from xlib import XlibWindow as Window, XlibSwapchain as BaseSwapchain
 else:
     raise OSError("Platform not supported")

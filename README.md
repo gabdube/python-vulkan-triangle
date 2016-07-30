@@ -11,10 +11,10 @@ The program is kind of a port of the vulkan example by Sascha Willems (at <https
 
 ## Requirements
 
-Python 3.5 (I use asyncio to handle the system events and the rendering phase asynchronously)
-The latest Vulkan driver
-Windows **or** Linux
-XCB
+Python 3.5 (I use asyncio to handle the system events and the rendering phase asynchronously)  
+The latest Vulkan driver  
+Windows **or** Linux (only tested on Ubuntu 16.04 LTS)  
+XCB  
 
 ## It's not over
 
@@ -26,7 +26,7 @@ Keep in mind that the program is not a 1:1 copy of the original example.
 
 Windows 10 / R9 380 / i7 3770 @ 3.4 GHZ : ~ 4000 fps (python/no debugger) VS 2700 fps (python with debugger) VS ~4300 fps (c++/Release build)  
 Windows 10 / A-10-7300 Radeon R6 : ~ 750 fps (python/no debugging) VS 750 fps (c++)  (shitty laptop too shitty to run python with a debugger)  
-Ubuntu 16.04 LTS/ R9 380 / i7 3770 @ 3.4 GHZ : 4800 (python no debugger) VS 3000 fps (python with debugger) VS SEGFAULT (c++)  
+Ubuntu 16.04 LTS/ R9 380 / i7 3770 @ 3.4 GHZ : ~4800 fps (python no debugger) VS ~ 3000 fps (python with debugger) VS SEGFAULT (c++)  
 
 Not much of a suprise, the c++ version is faster, but not my much. Also while the c++ framerate stays relatively stable ~[+-100], the python framerate
  is much less stable ~(+-300). This is mostly due to the GC I guess.  

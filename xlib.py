@@ -1,5 +1,5 @@
 """
-    Minimalistic wrapper over the XLIB window api
+    Minimalistic wrapper over the XCB window api
 """
 import vk
 import weakref, asyncio
@@ -9,9 +9,9 @@ from ctypes import *
 # Extern libraries
 try:
     xcb = cdll.LoadLibrary('libxcb.so')
-    libc = cdll.LoadLibrary("libc.so.6")
+    libc = cdll.LoadLibrary('libc.so.6')
 except OSError:
-    raise OSError("Failed to import libxcb.so or libc. Is it installed?")
+    raise OSError('Failed to import libxcb.so or libc. Are they installed?')
 
 # TYPES
 xcb_connection_t = c_void_p
@@ -21,6 +21,7 @@ xcb_colormap_t = c_uint
 xcb_visualid_t = c_uint
 xcb_drawable_t = c_uint
 xcb_atom_t = c_uint
+xcb_timestamp_t = c_uint
 
 # Structures
 class xcb_screen_t(Structure):
@@ -37,6 +38,24 @@ class xcb_screen_t(Structure):
         ('backing_stores', c_ubyte), ('save_unders', c_ubyte),
         ('root_depth', c_ubyte), ('allowed_depths_len', c_ubyte)
     )
+
+class xcb_motion_notify_event_t(Structure):
+    _fields_ = (
+        ('response_type', c_ubyte),
+        ('detail', c_ubyte),
+        ('sequence', c_ushort),
+        ('time', xcb_timestamp_t),
+        ('root', xcb_window_t),
+        ('event', xcb_window_t),
+        ('child', xcb_window_t),
+        ('root_x', c_short), ('root_y', c_short),
+        ('event_x', c_short), ('event_y', c_short),
+        ('state', c_ushort),
+        ('same_screen', c_ubyte),
+        ('pad0', c_ubyte)
+    )
+
+xcb_button_press_event_t = xcb_motion_notify_event_t
 
 class xcb_get_geometry_reply_t(Structure):
     _fields_ = (
@@ -94,7 +113,7 @@ XCB_EVENT_MASK_EXPOSURE = 32768
 XCB_EVENT_MASK_STRUCTURE_NOTIFY = 131072
 XCB_EVENT_MASK_POINTER_MOTION = 64
 XCB_EVENT_MASK_BUTTON_PRESS = 4
-XCB_EVENT_MASK_BUTTON_RELEASE = 2
+XCB_EVENT_MASK_BUTTON_RELEASE = 8
 
 XCB_COPY_FROM_PARENT = 0
 
@@ -105,8 +124,16 @@ XCB_ATOM_WM_NAME = 39
 
 XCB_WINDOW_CLASS_INPUT_OUTPUT = 1
 
+XCB_BUTTON_PRESS = 4
+XCB_BUTTON_RELEASE = 5
+XCB_MOTION_NOTIFY = 6
 XCB_DESTROY_NOTIFY = 17
 XCB_CLIENT_MESSAGE = 33
+
+XCB_BUTTON_INDEX_1 = 1
+XCB_BUTTON_INDEX_2 = 2
+XCB_BUTTON_INDEX_3 = 3
+
 
 # Functions
 
@@ -184,10 +211,40 @@ free = libc.free
 free.restype = None
 free.argtypes = (c_void_p,)
 
-def handle_event(event):
-    evt = event.response_type & 0x7f
+mouse_buttons = {'left': False, 'right': False, 'middle': False}
+mouse_pos = (0, 0)
+
+def handle_event(window, event_ptr):
+    global mouse_buttons, mouse_pos
+
+    evt = event_ptr.contents.response_type & 0x7f
     if evt in (XCB_CLIENT_MESSAGE, XCB_DESTROY_NOTIFY):
         return False
+    elif evt == XCB_MOTION_NOTIFY:
+        motion_event = cast(event_ptr, POINTER(xcb_motion_notify_event_t)).contents
+        app = window.app()
+        x, y = float(motion_event.event_x), float(motion_event.event_y)
+        
+        if mouse_buttons['left']:
+            app.rotation[0] += (mouse_pos[1] - y) * 0.80 
+            app.rotation[1] += (mouse_pos[0] - x) * 0.80 
+
+        elif mouse_buttons['right']:
+            app.zoom += (mouse_pos[1] - y) * 0.005
+            
+        mouse_pos = (x, y)
+        app.update_uniform_buffers()
+    
+    elif evt in (XCB_BUTTON_PRESS, XCB_BUTTON_RELEASE):
+        press_event = cast(event_ptr, POINTER(xcb_button_press_event_t)).contents
+        pressed = evt == XCB_BUTTON_PRESS
+
+        if press_event.detail == XCB_BUTTON_INDEX_1:
+            mouse_buttons['left'] = pressed
+        elif press_event.detail == XCB_BUTTON_INDEX_3:
+            mouse_buttons['right'] = pressed
+        elif press_event.detail == XCB_BUTTON_INDEX_2:
+            mouse_buttons['middle'] = pressed
 
     return True
 
@@ -198,7 +255,7 @@ async def process_events(window):
         # Poll events until there are none left
         event = xcb_poll_for_event(window.connection)
         while event:
-            listen_events = handle_event(event.contents)
+            listen_events &= handle_event(window, event)
             free(event)
 
             event = xcb_poll_for_event(window.connection)
