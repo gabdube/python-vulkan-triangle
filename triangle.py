@@ -9,7 +9,6 @@
 
     @author: Gabriel Dubé
 """
-
 import platform, asyncio, vk, weakref
 from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
 from xmath import *
@@ -19,6 +18,7 @@ system_name = platform.system()
 if system_name == 'Windows':
     from win32 import Win32Window as Window, WinSwapchain as BaseSwapchain
 elif system_name == 'Linux':
+
     from xlib import XlibWindow as Window, XlibSwapchain as BaseSwapchain
 else:
     raise OSError("Platform not supported")
@@ -1636,26 +1636,26 @@ class TriangleApplication(Application):
         self.init_command_buffers()
 
     def __del__(self):
+        if self.device is not None:
+            self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
 
-        self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
+            self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
 
-        self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
+            self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
 
-        self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
+            self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
 
-        self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
+            self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
+            self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
 
-        self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
-        self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
+            self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
+            self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
 
-        self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
-        self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+            self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
+            self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
 
-        self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
-        self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
-
-        self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
-        self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
+            self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
+            self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
 
         Application.__del__(self)
 

@@ -1247,7 +1247,11 @@ del mod
 
 ### INSTANCE FUNCTIONS ###
 
-vk = cdll.LoadLibrary('vulkan-1')
+try:
+    vk = cdll.LoadLibrary('vulkan-1')
+except OSError:
+    vk = cdll.LoadLibrary('libvulkan.so')
+
 GetInstanceProcAddr = vk.vkGetInstanceProcAddr
 GetInstanceProcAddr.restype = c_void_p  # Note: using a function to check the return value will corrupt the function pointer.
 GetInstanceProcAddr.argtypes = (Instance, c_char_p)
