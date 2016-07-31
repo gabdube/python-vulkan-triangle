@@ -48,6 +48,9 @@ WS_MINIMIZEBOX = 0x00020000
 WS_MAXIMIZEBOX = 0x00010000
 WS_OVERLAPPEDWINDOW = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX
 
+SIZE_MAXIMIZED = 2
+SIZE_RESTORED = 0
+
 CW_USEDEFAULT = 0x80000000
 
 SW_SHOWNORMAL = 5
@@ -159,6 +162,8 @@ def wndproc(window, hwnd, msg, w, l):
 
     if msg == WM_SIZE:
         resize_target = c_short(l).value, c_short(l>>16).value
+        if w in (SIZE_MAXIMIZED, SIZE_RESTORED):
+            window.app().resize_display(*resize_target)
 
     elif msg == WM_EXITSIZEMOVE:
         window.app().resize_display(*resize_target)

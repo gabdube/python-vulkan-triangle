@@ -754,6 +754,9 @@ class Application(object):
         return shader_info
 
     def resize_display(self, width, height):
+        if not self.initialized:
+            return 
+
         self.create_setup_buffer()
 
         # Recreate the swap chain
@@ -779,6 +782,7 @@ class Application(object):
         self.create_command_buffers()
 
     def __init__(self):
+        self.initialized = False
         self.running = False
         self.zoom = -2.5               # Scene zoom
         self.rotation = (c_float*3)()  # Scene rotation
@@ -1482,6 +1486,9 @@ class TriangleApplication(Application):
         self.UnmapMemory(self.device, self.uniform_data['memory'])
 
     def resize_display(self, width, height):
+        if not self.initialized:
+            return 
+            
         Application.resize_display(self, width, height)
 
         self.init_command_buffers()
@@ -1495,6 +1502,7 @@ class TriangleApplication(Application):
             Add the render phase to the asyncio loop
         """
         asyncio.ensure_future(self.render())
+        self.initialized = True
 
     def draw(self):
         current_buffer = c_uint(0)
