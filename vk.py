@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
     Thin wrapper over the vulkan API using ctypes.
     This wrapper is incomplete and should'nt be used outside this demo

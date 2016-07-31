@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
     Minimalistic wrapper over the XCB window api
 """

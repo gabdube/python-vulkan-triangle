@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 # Some math functions
 # Tuple are returned because list can't be hashed (and so lrucache fails)
 

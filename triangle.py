@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+
 """
     Minimalistic vulkan triangle example powered by asyncio. The demo
     was tested and should run on Windows and Linux. 
