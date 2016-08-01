@@ -1259,7 +1259,7 @@ del mod
 try:
     vk = cdll.LoadLibrary('vulkan-1')
 except OSError:
-    vk = cdll.LoadLibrary('libvulkan.so')
+    vk = cdll.LoadLibrary('libvulkan.so.1')
 
 GetInstanceProcAddr = vk.vkGetInstanceProcAddr
 GetInstanceProcAddr.restype = c_void_p  # Note: using a function to check the return value will corrupt the function pointer.
