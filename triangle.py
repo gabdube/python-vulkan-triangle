@@ -13,7 +13,7 @@
 """
 import platform, asyncio, vk, weakref
 from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
-from xmath import *
+from xmath import Mat4, perspective, translate, rotate
 from os.path import dirname
 
 system_name = platform.system()
