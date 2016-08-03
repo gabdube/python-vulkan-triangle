@@ -1273,7 +1273,7 @@ GetInstanceProcAddr = vk.vkGetInstanceProcAddr
 GetInstanceProcAddr.restype = c_void_p  # Note: using a function to check the return value will corrupt the function pointer.
 GetInstanceProcAddr.argtypes = (Instance, c_char_p)
 
-CreateInstance = (WINFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(Instance(0), b'vkCreateInstance'))
+CreateInstance = (FUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(Instance(0), b'vkCreateInstance'))
 
 INSTANCE_FUNCTIONS = (
     (b'vkDestroyInstance', None, Instance, c_void_p),
