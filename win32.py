@@ -101,7 +101,7 @@ UnregisterClassW.restype = result_not_null('Failed to unregister class')
 UnregisterClassW.argtypes = (LPCWSTR, HINSTANCE)
 
 DestroyWindow = u32.DestroyWindow
-DestroyWindow.restype = result_not_null('Failed to destroy window')
+DestroyWindow.restype = HWND
 DestroyWindow.argtypes = (HWND,)
 
 ShowWindow = u32.ShowWindow

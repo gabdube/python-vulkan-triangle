@@ -290,7 +290,7 @@ class Application(object):
 
         # Enumerate the physical devices
         gpu_count = c_uint(0)
-        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), vk.NULL_HANDLE_PTR )
+        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), vk.NULL_DISPATCHABLE_HANDLE_PTR )
         if result != vk.SUCCESS or gpu_count.value == 0:
             raise RuntimeError('Could not fetch the physical devices or there are no devices available')
 

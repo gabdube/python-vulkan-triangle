@@ -15,8 +15,10 @@ ENABLE_VALIDATION = False
 
 NULL = c_void_p(0)
 NULL_LAYERS = cast(NULL, POINTER(c_char_p))
-NULL_HANDLE = c_size_t(0)
-NULL_HANDLE_PTR = cast(NULL, POINTER(c_size_t) )
+NULL_DISPATCHABLE_HANDLE = c_size_t(0)
+NULL_DISPATCHABLE_HANDLE_PTR = cast(NULL, POINTER(c_size_t) )
+NULL_HANDLE = c_ulonglong(0)
+NULL_HANDLE_PTR = cast(NULL, POINTER(c_ulonglong) )
 NULL_CUINT_PTR = cast(NULL, POINTER(c_uint) )
 
 ### Debug function type ###
@@ -40,31 +42,31 @@ PhysicalDevice = c_size_t
 Device = c_size_t
 Queue = c_size_t
 CommandBuffer = c_size_t
-DeviceMemory = c_size_t
-CommandPool = c_size_t
-Buffer = c_size_t
-BufferView = c_size_t
-Image = c_size_t
-ImageView = c_size_t
-ShaderModule = c_size_t
-Pipeline = c_size_t
-PipelineLayout = c_size_t
-Sampler = c_size_t
-DescriptorSet = c_size_t
-DescriptorSetLayout = c_size_t
-DescriptorPool = c_size_t
-Fence = c_size_t
-Semaphore = c_size_t
-Event = c_size_t
-QueryPool = c_size_t
-Framebuffer = c_size_t
-RenderPass = c_size_t
-PipelineCache = c_size_t
-DisplayKHR = c_size_t
-DisplayModeKHR = c_size_t
-SurfaceKHR = c_size_t
-SwapchainKHR = c_size_t
-DebugReportCallbackEXT = c_size_t
+DeviceMemory = c_ulonglong
+CommandPool = c_ulonglong
+Buffer = c_ulonglong
+BufferView = c_ulonglong
+Image = c_ulonglong
+ImageView = c_ulonglong
+ShaderModule = c_ulonglong
+Pipeline = c_ulonglong
+PipelineLayout = c_ulonglong
+Sampler = c_ulonglong
+DescriptorSet = c_ulonglong
+DescriptorSetLayout = c_ulonglong
+DescriptorPool = c_ulonglong
+Fence = c_ulonglong
+Semaphore = c_ulonglong
+Event = c_ulonglong
+QueryPool = c_ulonglong
+Framebuffer = c_ulonglong
+RenderPass = c_ulonglong
+PipelineCache = c_ulonglong
+DisplayKHR = c_ulonglong
+DisplayModeKHR = c_ulonglong
+SurfaceKHR = c_ulonglong
+SwapchainKHR = c_ulonglong
+DebugReportCallbackEXT = c_ulonglong
 
 ### ENUMS ###
 
@@ -1256,16 +1258,22 @@ del mod
 
 ### INSTANCE FUNCTIONS ###
 
-try:
-    vk = cdll.LoadLibrary('vulkan-1')
-except OSError:
+import platform, sys
+system_name = platform.system()
+if system_name == 'Windows':
+    # On Windows, Vulkan commands use the stdcall convention
+    FUNCTYPE = WINFUNCTYPE
+    vk = windll.LoadLibrary('vulkan-1')
+elif system_name == 'Linux':
+    FUNCTYPE = CFUNCTYPE
     vk = cdll.LoadLibrary('libvulkan.so.1')
+    
 
 GetInstanceProcAddr = vk.vkGetInstanceProcAddr
 GetInstanceProcAddr.restype = c_void_p  # Note: using a function to check the return value will corrupt the function pointer.
 GetInstanceProcAddr.argtypes = (Instance, c_char_p)
 
-CreateInstance = (CFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(Instance(0), b'vkCreateInstance'))
+CreateInstance = (WINFUNCTYPE(c_uint, POINTER(InstanceCreateInfo), c_void_p, POINTER(Instance)))(GetInstanceProcAddr(Instance(0), b'vkCreateInstance'))
 
 INSTANCE_FUNCTIONS = (
     (b'vkDestroyInstance', None, Instance, c_void_p),
@@ -1308,14 +1316,14 @@ DEVICE_FUNCTIONS = (
     (b'vkDestroyImage', None, Device, Image, c_void_p),
     (b'vkGetImageMemoryRequirements', None, Device, Image, POINTER(MemoryRequirements)),
     (b'vkAllocateMemory', c_uint, Device, POINTER(MemoryAllocateInfo), c_void_p, POINTER(DeviceMemory)),
-    (b'vkBindImageMemory', c_uint, Device, DeviceMemory, c_ulonglong),
+    (b'vkBindImageMemory', c_uint, Device, Image, DeviceMemory, c_ulonglong),
     (b'vkFreeMemory', None, Device, DeviceMemory, c_void_p),
     (b'vkCreateRenderPass', c_uint, Device, POINTER(RenderPassCreateInfo), c_void_p, POINTER(RenderPass)),
     (b'vkDestroyRenderPass', None, Device, RenderPass, c_void_p),
     (b'vkCreatePipelineCache', c_uint, Device, POINTER(PipelineCacheCreateInfo), c_void_p, POINTER(PipelineCache)),
     (b'vkDestroyPipelineCache', None, Device, PipelineCache, c_void_p),
     (b'vkCreateFramebuffer', c_uint, Device, POINTER(FramebufferCreateInfo), c_void_p, POINTER(Framebuffer)),
-    (b'vkDestroyFramebuffer', None, Framebuffer, c_void_p),
+    (b'vkDestroyFramebuffer', None, Device, Framebuffer, c_void_p),
     (b'vkCreateSemaphore', c_uint, Device, POINTER(SemaphoreCreateInfo), c_void_p, POINTER(Semaphore)),
     (b'vkDestroySemaphore', None, Device, Semaphore, c_void_p),
     (b'vkCreateBuffer', c_uint, Device, POINTER(BufferCreateInfo), c_void_p, POINTER(Buffer)),
@@ -1361,7 +1369,7 @@ def load_functions(owner, obj, functions_list, loader):
         py_name = name.decode()[2::]
         _fn_ptr = loader(obj, name)
         if _fn_ptr is not None:
-            fn = (CFUNCTYPE(return_type, *args))(_fn_ptr)
+            fn = (FUNCTYPE(return_type, *args))(_fn_ptr)
             setattr(owner, py_name, fn)
         else:
             print('Could not load function {}'.format(py_name))
