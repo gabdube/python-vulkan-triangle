@@ -970,7 +970,7 @@ ReallocationFunction = FUNCTYPE( c_void_p, c_void_p, c_void_p, c_size_t, c_size_
 AllocationFunction = FUNCTYPE( c_void_p, c_void_p, c_size_t, c_size_t, SystemAllocationScope, )
 FreeFunction = FUNCTYPE( None, c_void_p, c_void_p, )
 VoidFunction = FUNCTYPE( None, )
-DebugReportCallbackEXT = FUNCTYPE( Bool32, DebugReportFlagsEXT, DebugReportObjectTypeEXT, c_uint64, c_size_t, c_int, c_char_p, c_char_p, c_void_p, )
+fn_DebugReportCallbackEXT = FUNCTYPE( Bool32, DebugReportFlagsEXT, DebugReportObjectTypeEXT, c_uint64, c_size_t, c_int, c_char_p, c_char_p, c_void_p, )
 
 
 # STRUCTURES
@@ -2221,7 +2221,7 @@ DebugReportCallbackCreateInfoEXT = define_structure('DebugReportCallbackCreateIn
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', DebugReportFlagsEXT),
-    ('callback', DebugReportCallbackEXT),
+    ('callback', fn_DebugReportCallbackEXT),
     ('user_data', c_void_p),
 )
 
