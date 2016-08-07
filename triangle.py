@@ -12,9 +12,10 @@
     @author: Gabriel Dubé
 """
 import platform, asyncio, vk, weakref
-from ctypes import cast, c_char_p, c_uint, pointer, POINTER, byref, c_float, Structure
+from ctypes import cast, c_char_p, c_uint, c_ubyte, c_ulonglong, pointer, POINTER, byref, c_float, Structure, sizeof, memmove
 from xmath import Mat4, perspective, translate, rotate
 from os.path import dirname
+from itertools import chain
 
 system_name = platform.system()
 if system_name == 'Windows':
@@ -55,14 +56,14 @@ class Debugger(object):
         callback_fn = vk.fn_DebugReportCallbackEXT(Debugger.print_message)
         create_info = vk.DebugReportCallbackCreateInfoEXT(
             s_type=vk.STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT,
-            next=vk.NULL, 
+            next=None, 
             flags=vk.DEBUG_REPORT_ERROR_BIT_EXT | vk.DEBUG_REPORT_WARNING_BIT_EXT,
             callback=callback_fn,
-            user_data=vk.NULL
+            user_data=None
         )
 
         debug_report_callback = vk.DebugReportCallbackEXT(0)
-        result = app.CreateDebugReportCallbackEXT(app.instance, byref(create_info), vk.NULL, byref(debug_report_callback))
+        result = app.CreateDebugReportCallbackEXT(app.instance, byref(create_info), None, byref(debug_report_callback))
 
         self.callback_fn = callback_fn
         self.debug_report_callback = debug_report_callback
@@ -72,7 +73,7 @@ class Debugger(object):
         if app is None:
             raise RuntimeError('Application was freed')
 
-        app.DestroyDebugReportCallbackEXT(app.instance, self.debug_report_callback, vk.NULL)
+        app.DestroyDebugReportCallbackEXT(app.instance, self.debug_report_callback, None)
 
 class Swapchain(BaseSwapchain):
 
@@ -94,7 +95,7 @@ class Swapchain(BaseSwapchain):
 
         # Get the available present mode
         prez_count = c_uint(0)
-        result = app.GetPhysicalDeviceSurfacePresentModesKHR(app.gpu, self.surface, byref(prez_count), cast(vk.NULL, POINTER(c_uint)))
+        result = app.GetPhysicalDeviceSurfacePresentModesKHR(app.gpu, self.surface, byref(prez_count), None)
         if result != vk.SUCCESS and prez_count.value > 0:
             raise RuntimeError('Failed to get surface presenting mode')
         
@@ -131,7 +132,7 @@ class Swapchain(BaseSwapchain):
 
         # Get the supported image format
         format_count = c_uint(0)
-        result = app.GetPhysicalDeviceSurfaceFormatsKHR(app.gpu, self.surface, byref(format_count), cast(vk.NULL, POINTER(vk.SurfaceFormatKHR)))
+        result = app.GetPhysicalDeviceSurfaceFormatsKHR(app.gpu, self.surface, byref(format_count), None)
         if result != vk.SUCCESS and format_count.value > 0:
             raise RuntimeError('Failed to get surface available image format')
 
@@ -151,19 +152,19 @@ class Swapchain(BaseSwapchain):
 
         #Create the swapchain
         create_info = vk.SwapchainCreateInfoKHR(
-            s_type=vk.STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, next=vk.NULL, 
+            s_type=vk.STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR, next=None, 
             flags=0, surface=self.surface, min_image_count=swapchain_image_count,
             image_format=color_format, image_color_space=color_space, 
             image_extent=swapchain_extent, image_array_layers=1, image_usage=vk.IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             image_sharing_mode=vk.SHARING_MODE_EXCLUSIVE, queue_family_index_count=0,
-            queue_family_indices=cast(vk.NULL, POINTER(c_uint)), pre_transform=transform, 
+            queue_family_indices=cast(None, POINTER(c_uint)), pre_transform=transform, 
             composite_alpha=vk.COMPOSITE_ALPHA_OPAQUE_BIT_KHR, present_mode=present_mode,
             clipped=1,
             old_swapchain=(self.swapchain or vk.SwapchainKHR(0))
         )
 
         swapchain = vk.SwapchainKHR(0)
-        result = app.CreateSwapchainKHR(app.device, byref(create_info), vk.NULL, byref(swapchain))
+        result = app.CreateSwapchainKHR(app.device, byref(create_info), None, byref(swapchain))
         
         if result == vk.SUCCESS:
             if self.swapchain is not None: #Destroy the old swapchain if it exists
@@ -177,14 +178,14 @@ class Swapchain(BaseSwapchain):
         app = self.app()
 
         image_count = c_uint(0)
-        result = app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), vk.NULL_CUINT_PTR)
+        result = app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), None)
         if result != vk.SUCCESS and req_image_count != image_count.value:
             raise RuntimeError('Failed to get the swapchain images')
  
         self.images = (vk.Image * image_count.value)()
         self.views = (vk.ImageView * image_count.value)()
 
-        assert( app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(c_uint))) == vk.SUCCESS)
+        assert( app.GetSwapchainImagesKHR(app.device, self.swapchain, byref(image_count), cast(self.images, POINTER(vk.Image))) == vk.SUCCESS)
 
         for index, image in enumerate(self.images):
             components = vk.ComponentMapping(
@@ -199,7 +200,7 @@ class Swapchain(BaseSwapchain):
 
             view_create_info = vk.ImageViewCreateInfo(
                 s_type=vk.STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-                next=vk.NULL, flags=0, image=image,
+                next=None, flags=0, image=image,
                 view_type=vk.IMAGE_VIEW_TYPE_2D, format=color_format,
                 components=components, subresource_range=subresource_range
             )
@@ -211,7 +212,7 @@ class Swapchain(BaseSwapchain):
                 vk.IMAGE_LAYOUT_PRESENT_SRC_KHR)
 
             view = vk.ImageView(0)
-            result = app.CreateImageView(app.device, byref(view_create_info), vk.NULL, byref(view))
+            result = app.CreateImageView(app.device, byref(view_create_info), None, byref(view))
             if result == vk.SUCCESS:
                 self.views[index] = view
             else:
@@ -220,14 +221,14 @@ class Swapchain(BaseSwapchain):
     def destroy_swapchain(self):
         app = self.app()
         for view in self.views:
-            app.DestroyImageView(app.device, view, vk.NULL)
-        app.DestroySwapchainKHR(app.device, self.swapchain, vk.NULL)
+            app.DestroyImageView(app.device, view, None)
+        app.DestroySwapchainKHR(app.device, self.swapchain, None)
 
     def destroy(self):
         app = self.app()
         if self.swapchain is not None:
             self.destroy_swapchain()
-        app.DestroySurfaceKHR(app.instance, self.surface, vk.NULL)
+        app.DestroySurfaceKHR(app.instance, self.surface, None)
         
 
 
@@ -238,9 +239,9 @@ class Application(object):
             Setup the vulkan instance
         """
         app_info = vk.ApplicationInfo(
-            s_type=vk.STRUCTURE_TYPE_APPLICATION_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_APPLICATION_INFO, next=None,
             application_name=b'PythonText', application_version=0,
-            engine_name=b'test', engine_version=0, api_version=((1<<22) | (0<<12) | (0))
+            engine_name=b'test', engine_version=0, api_version=vk.API_VERSION_1_0
         )
 
         if system_name == 'Windows':
@@ -255,13 +256,13 @@ class Application(object):
             _layer_names = cast((c_char_p*1)(*layer_names), POINTER(c_char_p))
         else:
             layer_count = 0
-            _layer_names = vk.NULL_LAYERS
+            _layer_names = None
 
         extensions = [c_char_p(x) for x in extensions]
         _extensions = cast((c_char_p*len(extensions))(*extensions), POINTER(c_char_p))
 
         create_info = vk.InstanceCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_INSTANCE_CREATE_INFO, next=vk.NULL, flags=0,
+            s_type=vk.STRUCTURE_TYPE_INSTANCE_CREATE_INFO, next=None, flags=0,
             application_info=pointer(app_info), 
 
             enabled_layer_count=layer_count,
@@ -272,9 +273,14 @@ class Application(object):
         )
 
         instance = vk.Instance(0)
-        result = vk.CreateInstance(byref(create_info), vk.NULL, byref(instance))
+        result = vk.CreateInstance(byref(create_info), None, byref(instance))
         if result == vk.SUCCESS:
-            vk.load_instance_functions(self, instance)
+            # For simplicity, all vulkan functions are saved in the application object
+            functions = chain(vk.load_functions(instance, vk.InstanceFunctions, vk.GetInstanceProcAddr),
+                              vk.load_functions(instance, vk.PhysicalDeviceFunctions, vk.GetInstanceProcAddr))
+            for name, function in functions:
+                setattr(self, name, function)
+
             self.instance = instance
 
             # Start logging errors if validation is enabled
@@ -290,7 +296,7 @@ class Application(object):
 
         # Enumerate the physical devices
         gpu_count = c_uint(0)
-        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), vk.NULL_DISPATCHABLE_HANDLE_PTR )
+        result = self.EnumeratePhysicalDevices(self.instance, byref(gpu_count), None )
         if result != vk.SUCCESS or gpu_count.value == 0:
             raise RuntimeError('Could not fetch the physical devices or there are no devices available')
 
@@ -307,7 +313,7 @@ class Application(object):
         self.GetPhysicalDeviceQueueFamilyProperties(
             self.gpu,
             byref(queue_families_count),
-            cast(vk.NULL, POINTER(vk.QueueFamilyProperties))
+            None
         )
         
         if queue_families_count.value == 0:
@@ -335,7 +341,7 @@ class Application(object):
         priorities = (c_float*1)(0.0)
         queue_create_info = vk.DeviceQueueCreateInfo(
             s_type=vk.STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            next=vk.NULL,
+            next=None,
             flags=0,
             queue_family_index=self.main_queue_family,
             queue_count=1,
@@ -353,10 +359,10 @@ class Application(object):
             _layer_names = cast((c_char_p*1)(*layer_names), POINTER(c_char_p))
         else:
             layer_count=0
-            _layer_names=vk.NULL_LAYERS
+            _layer_names=None
 
         create_info = vk.DeviceCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_DEVICE_CREATE_INFO, next=vk.NULL, flags=0,
+            s_type=vk.STRUCTURE_TYPE_DEVICE_CREATE_INFO, next=None, flags=0,
             queue_create_info_count=1, queue_create_infos=queue_create_infos,
             
             enabled_layer_count=layer_count, 
@@ -365,13 +371,21 @@ class Application(object):
             enabled_extension_count=1,
             enabled_extension_names=_extensions,
 
-            enabled_features=vk.NULL
+            enabled_features=None
         )
 
         device = vk.Device(0)
-        result = self.CreateDevice(self.gpu, byref(create_info), vk.NULL, byref(device))
+        result = self.CreateDevice(self.gpu, byref(create_info), None, byref(device))
         if result == vk.SUCCESS:
-            vk.load_device_functions(self, device, self.GetDeviceProcAddr)
+            # For simplicity, all vulkan functions are saved in the application object
+            # For simplicity, all vulkan functions are saved in the application object
+            functions = chain(vk.load_functions(device, vk.QueueFunctions, self.GetDeviceProcAddr),
+                              vk.load_functions(device, vk.DeviceFunctions, self.GetDeviceProcAddr),
+                              vk.load_functions(device, vk.CommandBufferFunctions, self.GetDeviceProcAddr))
+            
+            for name, function in functions:
+                setattr(self, name, function)
+
             self.device = device
         else:
             print(vk.c_int(result))
@@ -395,13 +409,13 @@ class Application(object):
 
     def create_command_pool(self):
         create_info = vk.CommandPoolCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, next= vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, next= None,
             flags=vk.COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
             queue_family_index=self.main_queue_family
         )
 
         pool = vk.CommandPool(0)
-        result = self.CreateCommandPool(self.device, byref(create_info), vk.NULL, byref(pool))
+        result = self.CreateCommandPool(self.device, byref(create_info), None, byref(pool))
         if result == vk.SUCCESS:
             self.cmd_pool = pool
         else:
@@ -409,14 +423,14 @@ class Application(object):
 
     def create_setup_buffer(self):
         create_info = vk.CommandBufferAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=vk.NULL, 
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=None, 
             command_pool=self.cmd_pool,
             level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
             command_buffer_count=1
         )
         begin_info = vk.CommandBufferBeginInfo(
             s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-            next=vk.NULL, flags= 0, inheritance_info=vk.NULL
+            next=None, flags= 0, inheritance_info=None
         )
 
         if self.setup_buffer is not None:
@@ -445,7 +459,7 @@ class Application(object):
         post_present_buffers = (vk.CommandBuffer*image_count)()
 
         alloc_info = vk.CommandBufferAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO, next=None,
             command_pool=self.cmd_pool,
             level=vk.COMMAND_BUFFER_LEVEL_PRIMARY,
             command_buffer_count=image_count
@@ -488,7 +502,7 @@ class Application(object):
             raise RuntimeError('Could not find a valid depth format')
 
         create_info = vk.ImageCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_IMAGE_CREATE_INFO, next=vk.NULL, flags=0,
+            s_type=vk.STRUCTURE_TYPE_IMAGE_CREATE_INFO, next=None, flags=0,
             image_type=vk.IMAGE_TYPE_2D, format=depth_format,
             extent=vk.Extent3D(width, height, 1), mip_levels=1,
             array_layers=1, samples=vk.SAMPLE_COUNT_1_BIT, tiling=vk.IMAGE_TILING_OPTIMAL,
@@ -501,18 +515,18 @@ class Application(object):
         )
 
         create_view_info = vk.ImageViewCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO, next=None,
             flags=0, view_type=vk.IMAGE_VIEW_TYPE_2D, format=depth_format,
             subresource_range=subres_range
         )
 
         mem_alloc_info = vk.MemoryAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=None,
             allocation_size=0, memory_type_index=0
         )
 
         depthstencil_image = vk.Image(0)
-        result=self.CreateImage(self.device, byref(create_info), vk.NULL, byref(depthstencil_image))
+        result=self.CreateImage(self.device, byref(create_info), None, byref(depthstencil_image))
         if result != vk.SUCCESS:
             raise RuntimeError('Failed to create depth stencil image')
 
@@ -522,7 +536,7 @@ class Application(object):
         mem_alloc_info.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
         
         depthstencil_mem = vk.DeviceMemory(0)
-        result = self.AllocateMemory(self.device, byref(mem_alloc_info), vk.NULL, byref(depthstencil_mem))
+        result = self.AllocateMemory(self.device, byref(mem_alloc_info), None, byref(depthstencil_mem))
         if result != vk.SUCCESS:
             raise RuntimeError('Could not allocate depth stencil image memory')
 
@@ -539,7 +553,7 @@ class Application(object):
 
         depthstencil_view = vk.ImageView(0)
         create_view_info.image = depthstencil_image
-        result = self.CreateImageView(self.device, byref(create_view_info), vk.NULL, byref(depthstencil_view))
+        result = self.CreateImageView(self.device, byref(create_view_info), None, byref(depthstencil_view))
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create image view for depth stencil')
             
@@ -577,23 +591,23 @@ class Application(object):
 
         subpass = vk.SubpassDescription(
             pipeline_bind_point = vk.PIPELINE_BIND_POINT_GRAPHICS,
-            flags = 0, input_attachment_count=0, input_attachments=vk.NULL_REF,
+            flags = 0, input_attachment_count=0, input_attachments=None,
             color_attachment_count=1, color_attachments=pointer(color_ref),
-            resolve_attachments=vk.NULL_REF, depth_stencil_attachment=pointer(depth_ref),
-            preserve_attachment_count=0, preserve_attachments=cast(vk.NULL, POINTER(c_uint))
+            resolve_attachments=None, depth_stencil_attachment=pointer(depth_ref),
+            preserve_attachment_count=0, preserve_attachments=None
         )
 
         attachments = (vk.AttachmentDescription*2)(color, depth)
         create_info = vk.RenderPassCreateInfo(
             s_type=vk.STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-            next=vk.NULL, flags=0, attachment_count=2,
+            next=None, flags=0, attachment_count=2,
             attachments=cast(attachments, POINTER(vk.AttachmentDescription)),
             subpass_count=1, subpasses=pointer(subpass), dependency_count=0,
-            dependencies=vk.NULL
+            dependencies=None
         )
 
         renderpass = vk.RenderPass(0)
-        result = self.CreateRenderPass(self.device, byref(create_info), vk.NULL, byref(renderpass))
+        result = self.CreateRenderPass(self.device, byref(create_info), None, byref(renderpass))
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create renderpass')
 
@@ -601,12 +615,12 @@ class Application(object):
 
     def create_pipeline_cache(self):
         create_info = vk.PipelineCacheCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, next=vk.NULL,
-            flags=0, initial_data_size=0, initial_data=vk.NULL
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO, next=None,
+            flags=0, initial_data_size=0, initial_data=None
         )
 
         pipeline_cache = vk.PipelineCache(0)
-        result = self.CreatePipelineCache(self.device, byref(create_info), vk.NULL, byref(pipeline_cache))
+        result = self.CreatePipelineCache(self.device, byref(create_info), None, byref(pipeline_cache))
         if result != vk.SUCCESS:
             raise RuntimeError('Failed to create pipeline cache')
 
@@ -621,7 +635,7 @@ class Application(object):
 
         create_info = vk.FramebufferCreateInfo(
             s_type=vk.STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-            next=vk.NULL, flags=0, render_pass=self.render_pass,
+            next=None, flags=0, render_pass=self.render_pass,
             attachment_count=2, attachments=attachments,
             width=width, height=height, layers=1
         )
@@ -631,7 +645,7 @@ class Application(object):
             fb = vk.Framebuffer(0)
             attachments[0] = view
 
-            result = self.CreateFramebuffer(self.device, byref(create_info), vk.NULL, byref(fb))
+            result = self.CreateFramebuffer(self.device, byref(create_info), None, byref(fb))
             if result != vk.SUCCESS:
                 raise RuntimeError('Could not create the framebuffers')
             
@@ -642,11 +656,11 @@ class Application(object):
             raise RuntimeError('Failed to end setup command buffer')
 
         submit_info = vk.SubmitInfo(
-            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
-            wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
-            wait_dst_stage_mask=vk.NULL_CUINT_PTR, command_buffer_count=1,
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=None,
+            wait_semaphore_count=0, wait_semaphores=None,
+            wait_dst_stage_mask=None, command_buffer_count=1,
             command_buffers=pointer(self.setup_buffer),
-            signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
+            signal_semaphore_count=0, signal_semaphores=None,
         )
 
         result = self.QueueSubmit(self.queue, 1, byref(submit_info), 0)
@@ -669,7 +683,7 @@ class Application(object):
             )
 
         barrier = vk.ImageMemoryBarrier(
-            s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL, 
+            s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=None, 
             old_layout=old_layout, new_layout=new_layout,
             src_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
             dst_queue_family_index=vk.QUEUE_FAMILY_IGNORED,
@@ -712,8 +726,8 @@ class Application(object):
             vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             vk.PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             0,
-            0,vk.NULL,
-            0,vk.NULL,
+            0,None,
+            0,None,
             1, byref(barrier)
         )
 
@@ -732,24 +746,24 @@ class Application(object):
         shader_f = open(path, 'rb')
         shader_bin = shader_f.read()
         shader_bin_size = len(shader_bin)
-        shader_bin = (vk.c_ubyte*shader_bin_size)(*shader_bin)
+        shader_bin = (c_ubyte*shader_bin_size)(*shader_bin)
         shader_f.close()
 
         # Compile the shader
         module = vk.ShaderModule(0)
         module_create_info = vk.ShaderModuleCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO, next=None,
             code_size=len(shader_bin), code=cast(shader_bin, POINTER(c_uint))
         )
 
-        result = self.CreateShaderModule(self.device, byref(module_create_info), vk.NULL, byref(module))
+        result = self.CreateShaderModule(self.device, byref(module_create_info), None, byref(module))
         if result != vk.SUCCESS:
             raise RuntimeError('Could not compile shader at {}'.format(path))
 
         shader_info = vk.PipelineShaderStageCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, next=None,
             flags=0, stage=stage, module=module, name=b'main',
-            specialization_info=vk.NULL
+            specialization_info=None
         )
 
         self.shaders_modules.append(module)
@@ -765,13 +779,13 @@ class Application(object):
         self.swapchain.create()
 
         # Recreate the frame buffers
-        self.DestroyImageView(self.device, self.depth_stencil['view'], vk.NULL)
-        self.DestroyImage(self.device, self.depth_stencil['image'], vk.NULL)
-        self.FreeMemory(self.device, self.depth_stencil['mem'], vk.NULL)
+        self.DestroyImageView(self.device, self.depth_stencil['view'], None)
+        self.DestroyImage(self.device, self.depth_stencil['image'], None)
+        self.FreeMemory(self.device, self.depth_stencil['mem'], None)
         self.create_depth_stencil()
 
         for fb in self.framebuffers:
-            self.DestroyFramebuffer(self.device, fb, vk.NULL)
+            self.DestroyFramebuffer(self.device, fb, None)
         self.create_framebuffers()
 
         self.flush_setup_buffer()
@@ -850,37 +864,37 @@ class Application(object):
                 self.FreeCommandBuffers(dev, self.cmd_pool, len_draw_buffers, cast(self.post_present_buffers, POINTER(vk.CommandBuffer)))
 
             if self.render_pass is not None:
-                self.DestroyRenderPass(self.device, self.render_pass, vk.NULL)
+                self.DestroyRenderPass(self.device, self.render_pass, None)
 
             for mod in self.shaders_modules:
-                self.DestroyShaderModule(self.device, mod, vk.NULL)
+                self.DestroyShaderModule(self.device, mod, None)
             
             if self.framebuffers is not None:
                 for fb in self.framebuffers:
-                    self.DestroyFramebuffer(self.device, fb, vk.NULL)
+                    self.DestroyFramebuffer(self.device, fb, None)
 
             if self.depth_stencil['view'] is not None:
-                self.DestroyImageView(dev, self.depth_stencil['view'], vk.NULL)
+                self.DestroyImageView(dev, self.depth_stencil['view'], None)
 
             if self.depth_stencil['image'] is not None:
-                self.DestroyImage(dev, self.depth_stencil['image'], vk.NULL)
+                self.DestroyImage(dev, self.depth_stencil['image'], None)
 
             if self.depth_stencil['mem'] is not None:
-                self.FreeMemory(dev, self.depth_stencil['mem'], vk.NULL)
+                self.FreeMemory(dev, self.depth_stencil['mem'], None)
             
             if self.pipeline_cache:
-                self.DestroyPipelineCache(self.device, self.pipeline_cache, vk.NULL)
+                self.DestroyPipelineCache(self.device, self.pipeline_cache, None)
 
             if self.cmd_pool:
-                self.DestroyCommandPool(dev, self.cmd_pool, vk.NULL)
+                self.DestroyCommandPool(dev, self.cmd_pool, None)
 
         
-            self.DestroyDevice(dev, vk.NULL)
+            self.DestroyDevice(dev, None)
 
         if ENABLE_VALIDATION:
             self.debugger.stop()
 
-        self.DestroyInstance(self.instance, vk.NULL)
+        self.DestroyInstance(self.instance, None)
         print('Application freed!')
 
 
@@ -891,14 +905,14 @@ class TriangleApplication(Application):
     def create_semaphores(self):
         create_info = vk.SemaphoreCreateInfo(
             s_type=vk.STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-            next=vk.NULL, flags=0
+            next=None, flags=0
         )
 
         present = vk.Semaphore(0)
         render = vk.Semaphore(0)
 
-        result1 = self.CreateSemaphore(self.device, byref(create_info), vk.NULL, byref(present))
-        result2 = self.CreateSemaphore(self.device, byref(create_info), vk.NULL, byref(render))
+        result1 = self.CreateSemaphore(self.device, byref(create_info), None, byref(present))
+        result2 = self.CreateSemaphore(self.device, byref(create_info), None, byref(render))
         if vk.SUCCESS not in (result1, result2):
             raise RuntimeError('Failed to create the semaphores')
 
@@ -910,7 +924,7 @@ class TriangleApplication(Application):
         attributes = (vk.VertexInputAttributeDescription*2)()
 
         bindings[0].binding = self.VERTEX_BUFFER_BIND_ID
-        bindings[0].stride = vk.sizeof(Vertex)
+        bindings[0].stride = sizeof(Vertex)
         bindings[0].input_rate = vk.VERTEX_INPUT_RATE_VERTEX
         
 
@@ -927,7 +941,7 @@ class TriangleApplication(Application):
         attributes[1].binding = self.VERTEX_BUFFER_BIND_ID
         attributes[1].location = 1
         attributes[1].format = vk.FORMAT_R32G32B32_SFLOAT
-        attributes[1].offset = vk.sizeof(c_float)*3
+        attributes[1].offset = sizeof(c_float)*3
 
         self.triangle['bindings'] = bindings
         self.triangle['attributes'] = attributes
@@ -936,7 +950,7 @@ class TriangleApplication(Application):
         data = vk.c_void_p(0)
         memreq = vk.MemoryRequirements()
         memalloc = vk.MemoryAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=None,
             allocation_size=0, memory_type_index=0
         )
 
@@ -947,11 +961,11 @@ class TriangleApplication(Application):
             Vertex(pos=(0.0, -1.0, 0.0), col=(0.0, 0.0,1.0)),
         )
 
-        vertices_size = vk.sizeof(Vertex)*3
+        vertices_size = sizeof(Vertex)*3
 
         # Setup indices
         indices_data = (c_uint*3)(0,1,2)
-        indices_size = vk.sizeof(indices_data)
+        indices_size = sizeof(indices_data)
 
         #
         # Store the vertices in the device memory
@@ -963,12 +977,12 @@ class TriangleApplication(Application):
 
         # 2 Create the vertex buffer
         vertex_info = vk.BufferCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=None,
             flags=0, size=vertices_size, usage=vk.BUFFER_USAGE_TRANSFER_SRC_BIT,
-            sharing_mode=0, queue_family_index_count=0, queue_family_indices=vk.NULL_CUINT_PTR
+            sharing_mode=0, queue_family_index_count=0, queue_family_indices=None
         )
 
-        result = self.CreateBuffer(self.device, byref(vertex_info), vk.NULL, byref(vertex['buffer']))
+        result = self.CreateBuffer(self.device, byref(vertex_info), None, byref(vertex['buffer']))
         if result != vk.SUCCESS:
             raise 'Could not create a buffer'
 
@@ -976,7 +990,7 @@ class TriangleApplication(Application):
         self.GetBufferMemoryRequirements(self.device, vertex['buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
         memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
-        result = self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(vertex['memory']))
+        result = self.AllocateMemory(self.device, byref(memalloc), None, byref(vertex['memory']))
         if result != vk.SUCCESS:
             raise 'Could not allocate buffer memory'
 
@@ -984,7 +998,7 @@ class TriangleApplication(Application):
         result = self.MapMemory(self.device, vertex['memory'], 0, memalloc.allocation_size, 0, byref(data))
         if result != vk.SUCCESS:
             raise 'Could not map memory to local'
-        vk.memmove(data, vertices_data, vertices_size)
+        memmove(data, vertices_data, vertices_size)
         x = cast(data, POINTER(c_float))
         self.UnmapMemory(self.device, vertex['memory'])
 
@@ -995,7 +1009,7 @@ class TriangleApplication(Application):
 
         # 6 Create a destination buffer with device only visibility and allocate its memory
         vertex_info.usage = vk.BUFFER_USAGE_VERTEX_BUFFER_BIT | vk.BUFFER_USAGE_TRANSFER_DST_BIT
-        result = self.CreateBuffer(self.device, byref(vertex_info), vk.NULL, byref(self.triangle['buffer']))
+        result = self.CreateBuffer(self.device, byref(vertex_info), None, byref(self.triangle['buffer']))
         if result != vk.SUCCESS:
             raise 'Could not create triangle buffer'
 
@@ -1003,7 +1017,7 @@ class TriangleApplication(Application):
         self.GetBufferMemoryRequirements(self.device, self.triangle['buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
         memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
-        result = self.AllocateMemory(self.device, byref(memalloc), vk.NULL, self.triangle['memory'])
+        result = self.AllocateMemory(self.device, byref(memalloc), None, self.triangle['memory'])
         if result != vk.SUCCESS:
             raise 'Could not allocate the triangle memory'
         result = self.BindBufferMemory(self.device, self.triangle['buffer'], self.triangle['memory'], 0)
@@ -1019,23 +1033,23 @@ class TriangleApplication(Application):
         indices_info.size = indices_size
         indices_info.usage = vk.BUFFER_USAGE_TRANSFER_SRC_BIT
 
-        assert(self.CreateBuffer(self.device, byref(indices_info), vk.NULL, byref(indices['buffer'])) == vk.SUCCESS)
+        assert(self.CreateBuffer(self.device, byref(indices_info), None, byref(indices['buffer'])) == vk.SUCCESS)
         self.GetBufferMemoryRequirements(self.device, indices['buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
         memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
-        assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(indices['memory'])) == vk.SUCCESS)
+        assert(self.AllocateMemory(self.device, byref(memalloc), None, byref(indices['memory'])) == vk.SUCCESS)
         assert(self.MapMemory(self.device, indices['memory'], 0, indices_size, 0, byref(data)) == vk.SUCCESS)
-        vk.memmove(data , indices_data, indices_size)
+        memmove(data , indices_data, indices_size)
         self.UnmapMemory(self.device, indices['memory'])
         assert(self.BindBufferMemory(self.device, indices['buffer'], indices['memory'], 0) == vk.SUCCESS)
         
         # Same steps as 5, 7 (with the exception for the usage flags)
         indices_info.usage =  vk.BUFFER_USAGE_INDEX_BUFFER_BIT | vk.BUFFER_USAGE_TRANSFER_DST_BIT
-        assert(self.CreateBuffer(self.device, byref(indices_info), vk.NULL, self.triangle['indices_buffer']) == vk.SUCCESS)
+        assert(self.CreateBuffer(self.device, byref(indices_info), None, self.triangle['indices_buffer']) == vk.SUCCESS)
         self.GetBufferMemoryRequirements(self.device, self.triangle['indices_buffer'], byref(memreq))
         memalloc.allocation_size = memreq.size
         memalloc.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_DEVICE_LOCAL_BIT)[1]
-        assert(self.AllocateMemory(self.device, byref(memalloc), vk.NULL, byref(self.triangle['indices_memory']))==vk.SUCCESS)
+        assert(self.AllocateMemory(self.device, byref(memalloc), None, byref(self.triangle['indices_memory']))==vk.SUCCESS)
         assert(self.BindBufferMemory(self.device, self.triangle['indices_buffer'], self.triangle['indices_memory'], 0) ==vk.SUCCESS)
        
         # Copy the staging buffer memory into the final buffers
@@ -1046,8 +1060,8 @@ class TriangleApplication(Application):
             command_buffer_count=1
         )
         begin_info = vk.CommandBufferBeginInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=vk.NULL,
-            flags=0, inheritance_info=vk.NULL
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=None,
+            flags=0, inheritance_info=None
         )
         copy_region = vk.BufferCopy(src_offset=0, dst_offset=0, size=0)
         copy_command = vk.CommandBuffer(0)
@@ -1077,11 +1091,11 @@ class TriangleApplication(Application):
 
         # Submit commands to the queue
         submit_info = vk.SubmitInfo(
-            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=vk.NULL,
-            wait_semaphore_count=0, wait_semaphores=vk.NULL_HANDLE_PTR,
-            wait_dst_stage_mask=vk.NULL_CUINT_PTR, command_buffer_count=1,
+            s_type=vk.STRUCTURE_TYPE_SUBMIT_INFO, next=None,
+            wait_semaphore_count=0, wait_semaphores=None,
+            wait_dst_stage_mask=None, command_buffer_count=1,
             command_buffers=pointer(copy_command),
-            signal_semaphore_count=0, signal_semaphores=vk.NULL_HANDLE_PTR,
+            signal_semaphore_count=0, signal_semaphores=None,
         )
 
         assert(self.QueueSubmit(self.queue, 1, byref(submit_info), 0)==vk.SUCCESS)
@@ -1090,11 +1104,11 @@ class TriangleApplication(Application):
         # Free temporary ressources
         self.FreeCommandBuffers(self.device, self.cmd_pool, 1, byref(copy_command))
 
-        self.DestroyBuffer(self.device, vertex['buffer'], vk.NULL)
-        self.FreeMemory(self.device, vertex['memory'], vk.NULL)
+        self.DestroyBuffer(self.device, vertex['buffer'], None)
+        self.FreeMemory(self.device, vertex['memory'], None)
 
-        self.DestroyBuffer(self.device, indices['buffer'], vk.NULL)
-        self.FreeMemory(self.device, indices['memory'], vk.NULL)
+        self.DestroyBuffer(self.device, indices['buffer'], None)
+        self.FreeMemory(self.device, indices['memory'], None)
 
         self.describe_bindings()
 
@@ -1103,17 +1117,17 @@ class TriangleApplication(Application):
 
         # Vertex shader uniform buffer block
         buffer_info = vk.BufferCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=vk.NULL,
-            flags=0, size=vk.sizeof(Mat4)*3, usage=vk.BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            sharing_mode=0, queue_family_index_count=0, queue_family_indices=vk.NULL_CUINT_PTR
+            s_type=vk.STRUCTURE_TYPE_BUFFER_CREATE_INFO, next=None,
+            flags=0, size=sizeof(Mat4)*3, usage=vk.BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+            sharing_mode=0, queue_family_index_count=0, queue_family_indices=None
         )
 
         alloc_info = vk.MemoryAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO, next=None,
             allocation_size=0, memory_type_index=0
         )
 
-        result = self.CreateBuffer(self.device, byref(buffer_info), vk.NULL, self.uniform_data['buffer'])
+        result = self.CreateBuffer(self.device, byref(buffer_info), None, self.uniform_data['buffer'])
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create the uniform buffer')
 
@@ -1121,7 +1135,7 @@ class TriangleApplication(Application):
         alloc_info.allocation_size = memreq.size
         alloc_info.memory_type_index = self.get_memory_type(memreq.memory_type_bits, vk.MEMORY_PROPERTY_HOST_VISIBLE_BIT)[1]
 
-        result = self.AllocateMemory(self.device, byref(alloc_info), vk.NULL, byref(self.uniform_data['memory']))
+        result = self.AllocateMemory(self.device, byref(alloc_info), None, byref(self.uniform_data['memory']))
         if result != vk.SUCCESS:
             raise RuntimeError('Failed to allocate the uniform buffer memory')
 
@@ -1132,7 +1146,7 @@ class TriangleApplication(Application):
         # Store information in the uniform's descriptor
         self.uniform_data['descriptor'].buffer = self.uniform_data['buffer']
         self.uniform_data['descriptor'].offset = 0
-        self.uniform_data['descriptor'].range = vk.sizeof(self.matrices)
+        self.uniform_data['descriptor'].range = sizeof(self.matrices)
 
         self.update_uniform_buffers()
  
@@ -1147,16 +1161,16 @@ class TriangleApplication(Application):
         binding = vk.DescriptorSetLayoutBinding(
             descriptor_type=vk.DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             descriptor_count=1, stage_flags=vk.SHADER_STAGE_VERTEX_BIT,
-            immutable_samplers=vk.NULL_HANDLE_PTR
+            immutable_samplers=None
         )
 
         layout = vk.DescriptorSetLayoutCreateInfo(
             s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-            next=vk.NULL, flags=0, binding_count=1, bindings=pointer(binding)
+            next=None, flags=0, binding_count=1, bindings=pointer(binding)
         )
 
         ds_layout = vk.DescriptorSetLayout(0)
-        result = self.CreateDescriptorSetLayout(self.device, byref(layout), vk.NULL, byref(ds_layout))
+        result = self.CreateDescriptorSetLayout(self.device, byref(layout), None, byref(ds_layout))
         if result != vk.SUCCESS:
             raise RuntimeError('Could not create descriptor set layout')
 
@@ -1165,13 +1179,13 @@ class TriangleApplication(Application):
 		# In a more complex scenario you would have different pipeline layouts for different
 		# descriptor set layouts that could be reused
         pipeline_info = vk.PipelineLayoutCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO, next=None,
             flags=0, set_layout_count=1, set_layouts=pointer(ds_layout),
             push_constant_range_count=0
         )
 
         pipeline_layout = vk.PipelineLayout(0)
-        result = self.CreatePipelineLayout(self.device, byref(pipeline_info), vk.NULL, byref(pipeline_layout))
+        result = self.CreatePipelineLayout(self.device, byref(pipeline_info), None, byref(pipeline_layout))
 
 
         self.pipeline_layout = pipeline_layout
@@ -1182,7 +1196,7 @@ class TriangleApplication(Application):
 
         # Vertex input state
         input_state = vk.PipelineVertexInputStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, next=vk.NULL, flags=0,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO, next=None, flags=0,
             vertex_binding_description_count = 1,
             vertex_attribute_description_count = 2,
             vertex_binding_descriptions = cast(tri['bindings'], POINTER(vk.VertexInputBindingDescription)),
@@ -1193,14 +1207,14 @@ class TriangleApplication(Application):
         # Vertex input state
 		# Describes the topoloy used with this pipeline 
         input_assembly_state = vk.PipelineInputAssemblyStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO, next=None,
             flags=0, primitive_restart_enable=0,
             topology=vk.PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,  #This pipeline renders vertex data as triangle lists
         )
 
         # Rasterization state
         raster_state = vk.PipelineRasterizationStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO, next=None,
             flags=0,
             polygon_mode=vk.POLYGON_MODE_FILL,          # Solid polygon mode
             cull_mode= vk.CULL_MODE_NONE,               # No culling
@@ -1215,7 +1229,7 @@ class TriangleApplication(Application):
             color_write_mask=0xF, blend_enable=0
         )
         color_blend_state = vk.PipelineColorBlendStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO, next=None,
             flags=0, logic_op_enable=0, attachment_count=1, attachments=pointer(blend_state)
         )
 
@@ -1232,7 +1246,7 @@ class TriangleApplication(Application):
 		# a viewport's dimensions or a scissor box
         dynamic_states = (c_uint*2)(vk.DYNAMIC_STATE_VIEWPORT, vk.DYNAMIC_STATE_SCISSOR)
         dynamic_state = vk.PipelineDynamicStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO, next=None,
             flags=0,dynamic_state_count=2,
             dynamic_states=cast(dynamic_states, POINTER(c_uint))
         )
@@ -1246,7 +1260,7 @@ class TriangleApplication(Application):
             compare_op=vk.COMPARE_OP_ALWAYS
         )
         depth_stencil_state = vk.PipelineDepthStencilStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, next=vk.NULL, 
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO, next=None, 
             flags=0, depth_test_enable=1, depth_write_enable=1, 
             depth_compare_op=vk.COMPARE_OP_LESS_OR_EQUAL,
             depth_bounds_test_enable=0, stencil_test_enable=0,
@@ -1256,7 +1270,7 @@ class TriangleApplication(Application):
         # Multi sampling state
         # No multi sampling used in this example
         multisample_state = vk.PipelineMultisampleStateCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, next=vk.NULL, 
+            s_type=vk.STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO, next=None, 
             flags=0, rasterization_samples=vk.SAMPLE_COUNT_1_BIT
         )
 
@@ -1268,12 +1282,12 @@ class TriangleApplication(Application):
         )
 
         create_info = vk.GraphicsPipelineCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO, next=None,
             flags=0, stage_count=2, 
             stages=cast(shader_stages, POINTER(vk.PipelineShaderStageCreateInfo)),
             vertex_input_state=pointer(input_state),
             input_assembly_state=pointer(input_assembly_state),
-            tessellation_state=vk.NULL,
+            tessellation_state=None,
             viewport_state=pointer(viewport_state),
             rasterization_state=pointer(raster_state),
             multisample_state=pointer(multisample_state),
@@ -1288,7 +1302,7 @@ class TriangleApplication(Application):
         )
 
         pipeline = vk.Pipeline(0)
-        result = self.CreateGraphicsPipelines(self.device, self.pipeline_cache, 1, byref(create_info), vk.NULL, byref(pipeline))
+        result = self.CreateGraphicsPipelines(self.device, self.pipeline_cache, 1, byref(create_info), None, byref(pipeline))
         if result != vk.SUCCESS:
              raise RuntimeError('Failed to create the graphics pipeline')
         
@@ -1307,13 +1321,13 @@ class TriangleApplication(Application):
         # Create the global descriptor pool
 		# All descriptors used in this example are allocated from this pool
         pool_create_info = vk.DescriptorPoolCreateInfo(
-            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO, next=None,
             flags=0, pool_size_count=1, pool_sizes=pointer(type_counts),
             max_sets=1  
         )
 
         pool = vk.DescriptorPool(0)
-        result = self.CreateDescriptorPool(self.device, byref(pool_create_info), vk.NULL, byref(pool))
+        result = self.CreateDescriptorPool(self.device, byref(pool_create_info), None, byref(pool))
 
         self.descriptor_pool = pool
 
@@ -1323,7 +1337,7 @@ class TriangleApplication(Application):
 		# descriptor set matching that binding point
 
         descriptor_alloc = vk.DescriptorSetAllocateInfo(
-            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO, next=None,
             descriptor_pool=self.descriptor_pool, descriptor_set_count=1,
             set_layouts=pointer(self.descriptor_set_layout)
         )
@@ -1336,20 +1350,20 @@ class TriangleApplication(Application):
 
         #Binding 0 : Uniform buffer
         write_set = vk.WriteDescriptorSet(
-            s_type=vk.STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, next=None,
             dst_set=descriptor_set, descriptor_count=1,
             descriptor_type=vk.DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             buffer_info=pointer(self.uniform_data['descriptor']),
             dst_binding=0 # Binds this uniform buffer to binding point 0
         )
 
-        self.UpdateDescriptorSets(self.device, 1, byref(write_set), 0, vk.NULL)
+        self.UpdateDescriptorSets(self.device, 1, byref(write_set), 0, None)
         self.descriptor_set = descriptor_set
 
     def init_command_buffers(self):
         
         begin_info = vk.CommandBufferBeginInfo(
-            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=vk.NULL
+            s_type=vk.STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO, next=None
         )
 
         clear_values = (vk.ClearValue*2)()
@@ -1362,7 +1376,7 @@ class TriangleApplication(Application):
             extent=vk.Extent2D(width=width, height=height)
         )
         render_pass_begin = vk.RenderPassBeginInfo(
-            s_type=vk.STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO, next=None,
             render_pass=self.render_pass, render_area=render_area,
             clear_value_count=2, 
             clear_values = cast(clear_values, POINTER(vk.ClearValue))
@@ -1377,7 +1391,7 @@ class TriangleApplication(Application):
             )
 
             barrier = vk.ImageMemoryBarrier(
-                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL,
+                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=None,
                 src_access_mask=0,
                 dst_access_mask=vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                 old_layout=vk.IMAGE_LAYOUT_PRESENT_SRC_KHR,
@@ -1393,8 +1407,8 @@ class TriangleApplication(Application):
 				vk.PIPELINE_STAGE_ALL_COMMANDS_BIT, 
 				vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 				0,
-				0, vk.NULL,
-				0, vk.NULL,
+				0, None,
+				0, None,
 				1, byref(barrier));
 
             assert(self.EndCommandBuffer(cmdbuf) == vk.SUCCESS)
@@ -1417,13 +1431,13 @@ class TriangleApplication(Application):
             self.CmdSetScissor(cmdbuf, 0, 1, byref(scissor))
 
             # Bind descriptor sets describing shader binding points
-            self.CmdBindDescriptorSets(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, byref(self.descriptor_set), 0, vk.NULL)
+            self.CmdBindDescriptorSets(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline_layout, 0, 1, byref(self.descriptor_set), 0, None)
 
             # Bind the rendering pipeline (including the shaders)
             self.CmdBindPipeline(cmdbuf, vk.PIPELINE_BIND_POINT_GRAPHICS, self.pipeline)
 
             # Bind triangle vertices
-            offsets = vk.c_ulonglong(0)
+            offsets = c_ulonglong(0)
             self.CmdBindVertexBuffers(cmdbuf, self.VERTEX_BUFFER_BIND_ID, 1, byref(self.triangle['buffer']), byref(offsets))
 
             # Bind triangle indices
@@ -1443,7 +1457,7 @@ class TriangleApplication(Application):
             )
 
             barrier = vk.ImageMemoryBarrier(
-                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=vk.NULL,
+                s_type=vk.STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER, next=None,
                 src_access_mask=vk.ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
                 dst_access_mask=vk.ACCESS_MEMORY_READ_BIT,
                 old_layout=vk.IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
@@ -1459,8 +1473,8 @@ class TriangleApplication(Application):
 				vk.PIPELINE_STAGE_ALL_COMMANDS_BIT, 
 				vk.PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
 				0,
-				0, vk.NULL,
-				0, vk.NULL,
+				0, None,
+				0, None,
 				1, byref(barrier));
 
             
@@ -1468,7 +1482,7 @@ class TriangleApplication(Application):
 
     def update_uniform_buffers(self):
         data = vk.c_void_p(0)
-        matsize = vk.sizeof(Mat4)*3
+        matsize = sizeof(Mat4)*3
 
         # Projection 
         width, height = self.window.dimensions()
@@ -1484,7 +1498,7 @@ class TriangleApplication(Application):
 
 
         self.MapMemory(self.device, self.uniform_data['memory'], 0, matsize, 0, byref(data))
-        vk.memmove(data, self.matrices, matsize)
+        memmove(data, self.matrices, matsize)
         self.UnmapMemory(self.device, self.uniform_data['memory'])
 
     def resize_display(self, width, height):
@@ -1511,7 +1525,7 @@ class TriangleApplication(Application):
 
         #  Get next image in the swap chain (back/front buffer)
         result = self.AcquireNextImageKHR(
-            self.device, self.swapchain.swapchain, vk.c_ulonglong(-1),
+            self.device, self.swapchain.swapchain, c_ulonglong(-1),
             self.render_semaphores['present'], vk.Fence(0), byref(current_buffer)
         )
         if result != vk.SUCCESS:
@@ -1561,7 +1575,7 @@ class TriangleApplication(Application):
 		# to ensure that the image is not rendered until
 		# all commands have been submitted
         present_info = vk.PresentInfoKHR(
-            s_type=vk.STRUCTURE_TYPE_PRESENT_INFO_KHR, next=vk.NULL,
+            s_type=vk.STRUCTURE_TYPE_PRESENT_INFO_KHR, next=None,
             swapchain_count=1, swapchains=pointer(self.swapchain.swapchain),
             image_indices = pointer(current_buffer),
             wait_semaphores = pointer(self.render_semaphores['render']),
@@ -1646,25 +1660,25 @@ class TriangleApplication(Application):
 
     def __del__(self):
         if self.device is not None:
-            self.DestroyDescriptorPool(self.device, self.descriptor_pool, vk.NULL)
+            self.DestroyDescriptorPool(self.device, self.descriptor_pool, None)
 
-            self.DestroyPipeline(self.device, self.pipeline, vk.NULL)
+            self.DestroyPipeline(self.device, self.pipeline, None)
 
-            self.DestroyPipelineLayout(self.device, self.pipeline_layout, vk.NULL)
+            self.DestroyPipelineLayout(self.device, self.pipeline_layout, None)
 
-            self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, vk.NULL)
+            self.DestroyDescriptorSetLayout(self.device, self.descriptor_set_layout, None)
 
-            self.DestroyBuffer(self.device, self.triangle['buffer'], vk.NULL)
-            self.FreeMemory(self.device, self.triangle['memory'], vk.NULL)
+            self.DestroyBuffer(self.device, self.triangle['buffer'], None)
+            self.FreeMemory(self.device, self.triangle['memory'], None)
 
-            self.DestroyBuffer(self.device, self.triangle['indices_buffer'], vk.NULL)
-            self.FreeMemory(self.device, self.triangle['indices_memory'], vk.NULL)
+            self.DestroyBuffer(self.device, self.triangle['indices_buffer'], None)
+            self.FreeMemory(self.device, self.triangle['indices_memory'], None)
 
-            self.DestroyBuffer(self.device, self.uniform_data['buffer'], vk.NULL)
-            self.FreeMemory(self.device, self.uniform_data['memory'], vk.NULL)
+            self.DestroyBuffer(self.device, self.uniform_data['buffer'], None)
+            self.FreeMemory(self.device, self.uniform_data['memory'], None)
 
-            self.DestroySemaphore(self.device, self.render_semaphores['present'], vk.NULL)
-            self.DestroySemaphore(self.device, self.render_semaphores['render'], vk.NULL)
+            self.DestroySemaphore(self.device, self.render_semaphores['present'], None)
+            self.DestroySemaphore(self.device, self.render_semaphores['render'], None)
 
         Application.__del__(self)
 
