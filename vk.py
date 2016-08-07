@@ -2137,23 +2137,23 @@ AndroidSurfaceCreateInfoKHR = define_structure('AndroidSurfaceCreateInfoKHR',
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', AndroidSurfaceCreateFlagsKHR),
-    ('window', POINTER(ANativeWindow)),
+    ('window', ANativeWindow),
 )
 
 MirSurfaceCreateInfoKHR = define_structure('MirSurfaceCreateInfoKHR',
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', MirSurfaceCreateFlagsKHR),
-    ('connection', POINTER(MirConnection)),
-    ('mir_surface', POINTER(MirSurface)),
+    ('connection', MirConnection),
+    ('mir_surface', MirSurface),
 )
 
 WaylandSurfaceCreateInfoKHR = define_structure('WaylandSurfaceCreateInfoKHR',
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', WaylandSurfaceCreateFlagsKHR),
-    ('display', POINTER(wl_display)),
-    ('surface', POINTER(wl_surface)),
+    ('display', wl_display),
+    ('surface', wl_surface),
 )
 
 Win32SurfaceCreateInfoKHR = define_structure('Win32SurfaceCreateInfoKHR',
@@ -2168,7 +2168,7 @@ XlibSurfaceCreateInfoKHR = define_structure('XlibSurfaceCreateInfoKHR',
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', XlibSurfaceCreateFlagsKHR),
-    ('dpy', POINTER(Display)),
+    ('dpy', Display),
     ('window', Window),
 )
 
@@ -2176,7 +2176,7 @@ XcbSurfaceCreateInfoKHR = define_structure('XcbSurfaceCreateInfoKHR',
     ('s_type', StructureType),
     ('next', c_void_p),
     ('flags', XcbSurfaceCreateFlagsKHR),
-    ('connection', POINTER(xcb_connection_t)),
+    ('connection', xcb_connection_t),
     ('window', xcb_window_t),
 )
 
@@ -2372,15 +2372,15 @@ PhysicalDeviceFunctions = (
     (b'vkGetDisplayModePropertiesKHR', Result, PhysicalDevice, DisplayKHR, POINTER(c_uint), POINTER(DisplayModePropertiesKHR), ),
     (b'vkCreateDisplayModeKHR', Result, PhysicalDevice, DisplayKHR, POINTER(DisplayModeCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(DisplayModeKHR), ),
     (b'vkGetDisplayPlaneCapabilitiesKHR', Result, PhysicalDevice, DisplayModeKHR, c_uint, POINTER(DisplayPlaneCapabilitiesKHR), ),
-    (b'vkGetPhysicalDeviceMirPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, POINTER(MirConnection), ),
+    (b'vkGetPhysicalDeviceMirPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, MirConnection, ),
     (b'vkGetPhysicalDeviceSurfaceSupportKHR', Result, PhysicalDevice, c_uint, SurfaceKHR, POINTER(Bool32), ),
     (b'vkGetPhysicalDeviceSurfaceCapabilitiesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(SurfaceCapabilitiesKHR), ),
     (b'vkGetPhysicalDeviceSurfaceFormatsKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR), ),
     (b'vkGetPhysicalDeviceSurfacePresentModesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(PresentModeKHR), ),
-    (b'vkGetPhysicalDeviceWaylandPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, POINTER(wl_display), ),
+    (b'vkGetPhysicalDeviceWaylandPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, wl_display, ),
     (b'vkGetPhysicalDeviceWin32PresentationSupportKHR', Bool32, PhysicalDevice, c_uint, ),
-    (b'vkGetPhysicalDeviceXlibPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, POINTER(Display), VisualID, ),
-    (b'vkGetPhysicalDeviceXcbPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, POINTER(xcb_connection_t), xcb_visualid_t, ),
+    (b'vkGetPhysicalDeviceXlibPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, Display, VisualID, ),
+    (b'vkGetPhysicalDeviceXcbPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, xcb_connection_t, xcb_visualid_t, ),
 )
 
 DeviceFunctions = (
