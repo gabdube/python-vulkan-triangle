@@ -59,6 +59,21 @@ class xcb_motion_notify_event_t(Structure):
 
 xcb_button_press_event_t = xcb_motion_notify_event_t
 
+class xcb_configure_notify_event_t(Structure):
+    _fields_ = (
+        ('response_type', c_ubyte),
+        ('pad0', c_ubyte),
+        ('sequence', c_ushort),
+        ('event', xcb_window_t),
+        ('window', xcb_window_t),
+        ('above_sibling', xcb_window_t),
+        ('x', c_short), ('y', c_short),
+        ('width', c_short), ('height', c_ushort),
+        ('border_width', c_ushort),
+        ('override_redirect', c_ubyte),
+        ('pad1', c_ubyte)
+    )
+
 class xcb_get_geometry_reply_t(Structure):
     _fields_ = (
         ('response_type', c_ubyte),
@@ -131,6 +146,7 @@ XCB_BUTTON_RELEASE = 5
 XCB_MOTION_NOTIFY = 6
 XCB_DESTROY_NOTIFY = 17
 XCB_CLIENT_MESSAGE = 33
+XCB_CONFIGURE_NOTIFY = 22
 
 XCB_BUTTON_INDEX_1 = 1
 XCB_BUTTON_INDEX_2 = 2
@@ -215,9 +231,10 @@ free.argtypes = (c_void_p,)
 
 mouse_buttons = {'left': False, 'right': False, 'middle': False}
 mouse_pos = (0, 0)
+resize_target = (0, 0)
 
 def handle_event(window, event_ptr):
-    global mouse_buttons, mouse_pos
+    global mouse_buttons, mouse_pos, resize_target
 
     evt = event_ptr.contents.response_type & 0x7f
     if evt in (XCB_CLIENT_MESSAGE, XCB_DESTROY_NOTIFY):
@@ -248,6 +265,13 @@ def handle_event(window, event_ptr):
         elif press_event.detail == XCB_BUTTON_INDEX_2:
             mouse_buttons['middle'] = pressed
 
+    elif evt == XCB_CONFIGURE_NOTIFY:
+        resize_event = cast(event_ptr, POINTER(xcb_configure_notify_event_t)).contents
+        width, height = resize_event.width, resize_event.height
+        if width != resize_target[0] or height != resize_target[1]:
+            window.app().resize_display(width, height)
+
+        resize_target = (width, height)
     return True
 
 async def process_events(window):
