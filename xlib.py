@@ -10,7 +10,7 @@ from ctypes import *
 
 # Extern libraries
 try:
-    xcb = cdll.LoadLibrary('libxcb.so')
+    xcb = cdll.LoadLibrary('libxcb.so.1')
     libc = cdll.LoadLibrary('libc.so.6')
 except OSError:
     raise OSError('Failed to import libxcb.so or libc. Are they installed?')
@@ -392,11 +392,11 @@ class XlibSwapchain(object):
         surface = vk.SurfaceKHR(0)
         surface_info = vk.XcbSurfaceCreateInfoKHR(
             s_type = vk.STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
-            next= vk.NULL, flags=0, connection=app.window.connection,
+            next= None, flags=0, connection=app.window.connection,
             window=app.window.window
         )
 
-        result = app.CreateXcbSurfaceKHR(app.instance, byref(surface_info), NULL, byref(surface))
+        result = app.CreateXcbSurfaceKHR(app.instance, byref(surface_info), None, byref(surface))
         if result == vk.SUCCESS:
             self.surface = surface
         else:

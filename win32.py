@@ -286,11 +286,11 @@ class WinSwapchain(object):
         surface = vk.SurfaceKHR(0)
         surface_info = vk.Win32SurfaceCreateInfoKHR(
             s_type = vk.STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
-            next= vk.NULL, flags=0, hinstance=GetModuleHandleW(None),
+            next= None, flags=0, hinstance=GetModuleHandleW(None),
             hwnd=app.window.handle
         )
 
-        result = app.CreateWin32SurfaceKHR(app.instance, byref(surface_info),NULL, byref(surface))
+        result = app.CreateWin32SurfaceKHR(app.instance, byref(surface_info), None, byref(surface))
         if result == vk.SUCCESS:
             self.surface = surface
         else:
