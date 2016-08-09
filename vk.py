@@ -964,12 +964,12 @@ RASTERIZATION_ORDER_RELAXED_AMD = 1
 
 # FUNC POINTERS
 
-InternalAllocationNotification = FUNCTYPE( None, c_void_p, c_size_t, InternalAllocationType, SystemAllocationScope, )
-InternalFreeNotification = FUNCTYPE( None, c_void_p, c_size_t, InternalAllocationType, SystemAllocationScope, )
-ReallocationFunction = FUNCTYPE( c_void_p, c_void_p, c_void_p, c_size_t, c_size_t, SystemAllocationScope, )
-AllocationFunction = FUNCTYPE( c_void_p, c_void_p, c_size_t, c_size_t, SystemAllocationScope, )
-FreeFunction = FUNCTYPE( None, c_void_p, c_void_p, )
-VoidFunction = FUNCTYPE( None, )
+fn_InternalAllocationNotification = FUNCTYPE( None, c_void_p, c_size_t, InternalAllocationType, SystemAllocationScope, )
+fn_InternalFreeNotification = FUNCTYPE( None, c_void_p, c_size_t, InternalAllocationType, SystemAllocationScope, )
+fn_ReallocationFunction = FUNCTYPE( c_void_p, c_void_p, c_void_p, c_size_t, c_size_t, SystemAllocationScope, )
+fn_AllocationFunction = FUNCTYPE( c_void_p, c_void_p, c_size_t, c_size_t, SystemAllocationScope, )
+fn_FreeFunction = FUNCTYPE( None, c_void_p, c_void_p, )
+fn_VoidFunction = FUNCTYPE( None, )
 fn_DebugReportCallbackEXT = FUNCTYPE( Bool32, DebugReportFlagsEXT, DebugReportObjectTypeEXT, c_uint64, c_size_t, c_int, c_char_p, c_char_p, c_void_p, )
 
 
@@ -1182,11 +1182,11 @@ ApplicationInfo = define_structure('ApplicationInfo',
 
 AllocationCallbacks = define_structure('AllocationCallbacks',
     ('user_data', c_void_p),
-    ('allocation', AllocationFunction),
-    ('reallocation', ReallocationFunction),
-    ('free', FreeFunction),
-    ('internal_allocation', InternalAllocationNotification),
-    ('internal_free', InternalFreeNotification),
+    ('allocation', fn_AllocationFunction),
+    ('reallocation', fn_ReallocationFunction),
+    ('free', fn_FreeFunction),
+    ('internal_allocation', fn_InternalAllocationNotification),
+    ('internal_free', fn_InternalFreeNotification),
 )
 
 DeviceQueueCreateInfo = define_structure('DeviceQueueCreateInfo',
@@ -2278,111 +2278,6 @@ DedicatedAllocationMemoryAllocateInfoNV = define_structure('DedicatedAllocationM
 
 # FUNCTIONS 
 
-InstanceFunctions = (
-    (b'vkDestroyInstance', None, Instance, POINTER(AllocationCallbacks), ),
-    (b'vkEnumeratePhysicalDevices', Result, Instance, POINTER(c_uint), POINTER(PhysicalDevice), ),
-    (b'vkGetDeviceProcAddr', VoidFunction, Device, c_char_p, ),
-    (b'vkCreateAndroidSurfaceKHR', Result, Instance, POINTER(AndroidSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateDisplayPlaneSurfaceKHR', Result, Instance, POINTER(DisplaySurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateMirSurfaceKHR', Result, Instance, POINTER(MirSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, POINTER(AllocationCallbacks), ),
-    (b'vkCreateWaylandSurfaceKHR', Result, Instance, POINTER(WaylandSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateWin32SurfaceKHR', Result, Instance, POINTER(Win32SurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateXlibSurfaceKHR', Result, Instance, POINTER(XlibSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateXcbSurfaceKHR', Result, Instance, POINTER(XcbSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
-    (b'vkCreateDebugReportCallbackEXT', Result, Instance, POINTER(DebugReportCallbackCreateInfoEXT), POINTER(AllocationCallbacks), POINTER(DebugReportCallbackEXT), ),
-    (b'vkDestroyDebugReportCallbackEXT', None, Instance, DebugReportCallbackEXT, POINTER(AllocationCallbacks), ),
-    (b'vkDebugReportMessageEXT', None, Instance, DebugReportFlagsEXT, DebugReportObjectTypeEXT, c_uint64, c_size_t, c_int, c_char_p, c_char_p, ),
-)
-
-QueueFunctions = (
-    (b'vkQueueSubmit', Result, Queue, c_uint, POINTER(SubmitInfo), Fence, ),
-    (b'vkQueueWaitIdle', Result, Queue, ),
-    (b'vkQueueBindSparse', Result, Queue, c_uint, POINTER(BindSparseInfo), Fence, ),
-    (b'vkQueuePresentKHR', Result, Queue, POINTER(PresentInfoKHR), ),
-)
-
-CommandBufferFunctions = (
-    (b'vkBeginCommandBuffer', Result, CommandBuffer, POINTER(CommandBufferBeginInfo), ),
-    (b'vkEndCommandBuffer', Result, CommandBuffer, ),
-    (b'vkResetCommandBuffer', Result, CommandBuffer, CommandBufferResetFlags, ),
-    (b'vkCmdBindPipeline', None, CommandBuffer, PipelineBindPoint, Pipeline, ),
-    (b'vkCmdSetViewport', None, CommandBuffer, c_uint, c_uint, POINTER(Viewport), ),
-    (b'vkCmdSetScissor', None, CommandBuffer, c_uint, c_uint, POINTER(Rect2D), ),
-    (b'vkCmdSetLineWidth', None, CommandBuffer, c_float, ),
-    (b'vkCmdSetDepthBias', None, CommandBuffer, c_float, c_float, c_float, ),
-    (b'vkCmdSetBlendConstants', None, CommandBuffer, c_float, ),
-    (b'vkCmdSetDepthBounds', None, CommandBuffer, c_float, c_float, ),
-    (b'vkCmdSetStencilCompareMask', None, CommandBuffer, StencilFaceFlags, c_uint, ),
-    (b'vkCmdSetStencilWriteMask', None, CommandBuffer, StencilFaceFlags, c_uint, ),
-    (b'vkCmdSetStencilReference', None, CommandBuffer, StencilFaceFlags, c_uint, ),
-    (b'vkCmdBindDescriptorSets', None, CommandBuffer, PipelineBindPoint, PipelineLayout, c_uint, c_uint, POINTER(DescriptorSet), c_uint, POINTER(c_uint), ),
-    (b'vkCmdBindIndexBuffer', None, CommandBuffer, Buffer, DeviceSize, IndexType, ),
-    (b'vkCmdBindVertexBuffers', None, CommandBuffer, c_uint, c_uint, POINTER(Buffer), POINTER(DeviceSize), ),
-    (b'vkCmdDraw', None, CommandBuffer, c_uint, c_uint, c_uint, c_uint, ),
-    (b'vkCmdDrawIndexed', None, CommandBuffer, c_uint, c_uint, c_uint, c_int, c_uint, ),
-    (b'vkCmdDrawIndirect', None, CommandBuffer, Buffer, DeviceSize, c_uint, c_uint, ),
-    (b'vkCmdDrawIndexedIndirect', None, CommandBuffer, Buffer, DeviceSize, c_uint, c_uint, ),
-    (b'vkCmdDispatch', None, CommandBuffer, c_uint, c_uint, c_uint, ),
-    (b'vkCmdDispatchIndirect', None, CommandBuffer, Buffer, DeviceSize, ),
-    (b'vkCmdCopyBuffer', None, CommandBuffer, Buffer, Buffer, c_uint, POINTER(BufferCopy), ),
-    (b'vkCmdCopyImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageCopy), ),
-    (b'vkCmdBlitImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageBlit), Filter, ),
-    (b'vkCmdCopyBufferToImage', None, CommandBuffer, Buffer, Image, ImageLayout, c_uint, POINTER(BufferImageCopy), ),
-    (b'vkCmdCopyImageToBuffer', None, CommandBuffer, Image, ImageLayout, Buffer, c_uint, POINTER(BufferImageCopy), ),
-    (b'vkCmdUpdateBuffer', None, CommandBuffer, Buffer, DeviceSize, DeviceSize, c_void_p, ),
-    (b'vkCmdFillBuffer', None, CommandBuffer, Buffer, DeviceSize, DeviceSize, c_uint, ),
-    (b'vkCmdClearColorImage', None, CommandBuffer, Image, ImageLayout, POINTER(ClearColorValue), c_uint, POINTER(ImageSubresourceRange), ),
-    (b'vkCmdClearDepthStencilImage', None, CommandBuffer, Image, ImageLayout, POINTER(ClearDepthStencilValue), c_uint, POINTER(ImageSubresourceRange), ),
-    (b'vkCmdClearAttachments', None, CommandBuffer, c_uint, POINTER(ClearAttachment), c_uint, POINTER(ClearRect), ),
-    (b'vkCmdResolveImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageResolve), ),
-    (b'vkCmdSetEvent', None, CommandBuffer, Event, PipelineStageFlags, ),
-    (b'vkCmdResetEvent', None, CommandBuffer, Event, PipelineStageFlags, ),
-    (b'vkCmdWaitEvents', None, CommandBuffer, c_uint, POINTER(Event), PipelineStageFlags, PipelineStageFlags, c_uint, POINTER(MemoryBarrier), c_uint, POINTER(BufferMemoryBarrier), c_uint, POINTER(ImageMemoryBarrier), ),
-    (b'vkCmdPipelineBarrier', None, CommandBuffer, PipelineStageFlags, PipelineStageFlags, DependencyFlags, c_uint, POINTER(MemoryBarrier), c_uint, POINTER(BufferMemoryBarrier), c_uint, POINTER(ImageMemoryBarrier), ),
-    (b'vkCmdBeginQuery', None, CommandBuffer, QueryPool, c_uint, QueryControlFlags, ),
-    (b'vkCmdEndQuery', None, CommandBuffer, QueryPool, c_uint, ),
-    (b'vkCmdResetQueryPool', None, CommandBuffer, QueryPool, c_uint, c_uint, ),
-    (b'vkCmdWriteTimestamp', None, CommandBuffer, PipelineStageFlagBits, QueryPool, c_uint, ),
-    (b'vkCmdCopyQueryPoolResults', None, CommandBuffer, QueryPool, c_uint, c_uint, Buffer, DeviceSize, DeviceSize, QueryResultFlags, ),
-    (b'vkCmdPushConstants', None, CommandBuffer, PipelineLayout, ShaderStageFlags, c_uint, c_uint, c_void_p, ),
-    (b'vkCmdBeginRenderPass', None, CommandBuffer, POINTER(RenderPassBeginInfo), SubpassContents, ),
-    (b'vkCmdNextSubpass', None, CommandBuffer, SubpassContents, ),
-    (b'vkCmdEndRenderPass', None, CommandBuffer, ),
-    (b'vkCmdExecuteCommands', None, CommandBuffer, c_uint, POINTER(CommandBuffer), ),
-    (b'vkCmdDebugMarkerBeginEXT', None, CommandBuffer, POINTER(DebugMarkerMarkerInfoEXT), ),
-    (b'vkCmdDebugMarkerEndEXT', None, CommandBuffer, ),
-    (b'vkCmdDebugMarkerInsertEXT', None, CommandBuffer, POINTER(DebugMarkerMarkerInfoEXT), ),
-)
-
-PhysicalDeviceFunctions = (
-    (b'vkGetPhysicalDeviceProperties', None, PhysicalDevice, POINTER(PhysicalDeviceProperties), ),
-    (b'vkGetPhysicalDeviceQueueFamilyProperties', None, PhysicalDevice, POINTER(c_uint), POINTER(QueueFamilyProperties), ),
-    (b'vkGetPhysicalDeviceMemoryProperties', None, PhysicalDevice, POINTER(PhysicalDeviceMemoryProperties), ),
-    (b'vkGetPhysicalDeviceFeatures', None, PhysicalDevice, POINTER(PhysicalDeviceFeatures), ),
-    (b'vkGetPhysicalDeviceFormatProperties', None, PhysicalDevice, Format, POINTER(FormatProperties), ),
-    (b'vkGetPhysicalDeviceImageFormatProperties', Result, PhysicalDevice, Format, ImageType, ImageTiling, ImageUsageFlags, ImageCreateFlags, POINTER(ImageFormatProperties), ),
-    (b'vkCreateDevice', Result, PhysicalDevice, POINTER(DeviceCreateInfo), POINTER(AllocationCallbacks), POINTER(Device), ),
-    (b'vkEnumerateDeviceLayerProperties', Result, PhysicalDevice, POINTER(c_uint), POINTER(LayerProperties), ),
-    (b'vkEnumerateDeviceExtensionProperties', Result, PhysicalDevice, c_char_p, POINTER(c_uint), POINTER(ExtensionProperties), ),
-    (b'vkGetPhysicalDeviceSparseImageFormatProperties', None, PhysicalDevice, Format, ImageType, SampleCountFlagBits, ImageUsageFlags, ImageTiling, POINTER(c_uint), POINTER(SparseImageFormatProperties), ),
-    (b'vkGetPhysicalDeviceDisplayPropertiesKHR', Result, PhysicalDevice, POINTER(c_uint), POINTER(DisplayPropertiesKHR), ),
-    (b'vkGetPhysicalDeviceDisplayPlanePropertiesKHR', Result, PhysicalDevice, POINTER(c_uint), POINTER(DisplayPlanePropertiesKHR), ),
-    (b'vkGetDisplayPlaneSupportedDisplaysKHR', Result, PhysicalDevice, c_uint, POINTER(c_uint), POINTER(DisplayKHR), ),
-    (b'vkGetDisplayModePropertiesKHR', Result, PhysicalDevice, DisplayKHR, POINTER(c_uint), POINTER(DisplayModePropertiesKHR), ),
-    (b'vkCreateDisplayModeKHR', Result, PhysicalDevice, DisplayKHR, POINTER(DisplayModeCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(DisplayModeKHR), ),
-    (b'vkGetDisplayPlaneCapabilitiesKHR', Result, PhysicalDevice, DisplayModeKHR, c_uint, POINTER(DisplayPlaneCapabilitiesKHR), ),
-    (b'vkGetPhysicalDeviceMirPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, MirConnection, ),
-    (b'vkGetPhysicalDeviceSurfaceSupportKHR', Result, PhysicalDevice, c_uint, SurfaceKHR, POINTER(Bool32), ),
-    (b'vkGetPhysicalDeviceSurfaceCapabilitiesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(SurfaceCapabilitiesKHR), ),
-    (b'vkGetPhysicalDeviceSurfaceFormatsKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR), ),
-    (b'vkGetPhysicalDeviceSurfacePresentModesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(PresentModeKHR), ),
-    (b'vkGetPhysicalDeviceWaylandPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, wl_display, ),
-    (b'vkGetPhysicalDeviceWin32PresentationSupportKHR', Bool32, PhysicalDevice, c_uint, ),
-    (b'vkGetPhysicalDeviceXlibPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, Display, VisualID, ),
-    (b'vkGetPhysicalDeviceXcbPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, xcb_connection_t, xcb_visualid_t, ),
-)
-
 DeviceFunctions = (
     (b'vkDestroyDevice', None, Device, POINTER(AllocationCallbacks), ),
     (b'vkGetDeviceQueue', None, Device, c_uint, c_uint, POINTER(Queue), ),
@@ -2469,8 +2364,113 @@ LoaderFunctions = (
     (b'vkEnumerateInstanceExtensionProperties', Result, c_char_p, POINTER(c_uint), POINTER(ExtensionProperties), ),
 )
 
+QueueFunctions = (
+    (b'vkQueueSubmit', Result, Queue, c_uint, POINTER(SubmitInfo), Fence, ),
+    (b'vkQueueWaitIdle', Result, Queue, ),
+    (b'vkQueueBindSparse', Result, Queue, c_uint, POINTER(BindSparseInfo), Fence, ),
+    (b'vkQueuePresentKHR', Result, Queue, POINTER(PresentInfoKHR), ),
+)
+
+PhysicalDeviceFunctions = (
+    (b'vkGetPhysicalDeviceProperties', None, PhysicalDevice, POINTER(PhysicalDeviceProperties), ),
+    (b'vkGetPhysicalDeviceQueueFamilyProperties', None, PhysicalDevice, POINTER(c_uint), POINTER(QueueFamilyProperties), ),
+    (b'vkGetPhysicalDeviceMemoryProperties', None, PhysicalDevice, POINTER(PhysicalDeviceMemoryProperties), ),
+    (b'vkGetPhysicalDeviceFeatures', None, PhysicalDevice, POINTER(PhysicalDeviceFeatures), ),
+    (b'vkGetPhysicalDeviceFormatProperties', None, PhysicalDevice, Format, POINTER(FormatProperties), ),
+    (b'vkGetPhysicalDeviceImageFormatProperties', Result, PhysicalDevice, Format, ImageType, ImageTiling, ImageUsageFlags, ImageCreateFlags, POINTER(ImageFormatProperties), ),
+    (b'vkCreateDevice', Result, PhysicalDevice, POINTER(DeviceCreateInfo), POINTER(AllocationCallbacks), POINTER(Device), ),
+    (b'vkEnumerateDeviceLayerProperties', Result, PhysicalDevice, POINTER(c_uint), POINTER(LayerProperties), ),
+    (b'vkEnumerateDeviceExtensionProperties', Result, PhysicalDevice, c_char_p, POINTER(c_uint), POINTER(ExtensionProperties), ),
+    (b'vkGetPhysicalDeviceSparseImageFormatProperties', None, PhysicalDevice, Format, ImageType, SampleCountFlagBits, ImageUsageFlags, ImageTiling, POINTER(c_uint), POINTER(SparseImageFormatProperties), ),
+    (b'vkGetPhysicalDeviceDisplayPropertiesKHR', Result, PhysicalDevice, POINTER(c_uint), POINTER(DisplayPropertiesKHR), ),
+    (b'vkGetPhysicalDeviceDisplayPlanePropertiesKHR', Result, PhysicalDevice, POINTER(c_uint), POINTER(DisplayPlanePropertiesKHR), ),
+    (b'vkGetDisplayPlaneSupportedDisplaysKHR', Result, PhysicalDevice, c_uint, POINTER(c_uint), POINTER(DisplayKHR), ),
+    (b'vkGetDisplayModePropertiesKHR', Result, PhysicalDevice, DisplayKHR, POINTER(c_uint), POINTER(DisplayModePropertiesKHR), ),
+    (b'vkCreateDisplayModeKHR', Result, PhysicalDevice, DisplayKHR, POINTER(DisplayModeCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(DisplayModeKHR), ),
+    (b'vkGetDisplayPlaneCapabilitiesKHR', Result, PhysicalDevice, DisplayModeKHR, c_uint, POINTER(DisplayPlaneCapabilitiesKHR), ),
+    (b'vkGetPhysicalDeviceMirPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, MirConnection, ),
+    (b'vkGetPhysicalDeviceSurfaceSupportKHR', Result, PhysicalDevice, c_uint, SurfaceKHR, POINTER(Bool32), ),
+    (b'vkGetPhysicalDeviceSurfaceCapabilitiesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(SurfaceCapabilitiesKHR), ),
+    (b'vkGetPhysicalDeviceSurfaceFormatsKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(SurfaceFormatKHR), ),
+    (b'vkGetPhysicalDeviceSurfacePresentModesKHR', Result, PhysicalDevice, SurfaceKHR, POINTER(c_uint), POINTER(PresentModeKHR), ),
+    (b'vkGetPhysicalDeviceWaylandPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, wl_display, ),
+    (b'vkGetPhysicalDeviceWin32PresentationSupportKHR', Bool32, PhysicalDevice, c_uint, ),
+    (b'vkGetPhysicalDeviceXlibPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, Display, VisualID, ),
+    (b'vkGetPhysicalDeviceXcbPresentationSupportKHR', Bool32, PhysicalDevice, c_uint, xcb_connection_t, xcb_visualid_t, ),
+)
+
+CommandBufferFunctions = (
+    (b'vkBeginCommandBuffer', Result, CommandBuffer, POINTER(CommandBufferBeginInfo), ),
+    (b'vkEndCommandBuffer', Result, CommandBuffer, ),
+    (b'vkResetCommandBuffer', Result, CommandBuffer, CommandBufferResetFlags, ),
+    (b'vkCmdBindPipeline', None, CommandBuffer, PipelineBindPoint, Pipeline, ),
+    (b'vkCmdSetViewport', None, CommandBuffer, c_uint, c_uint, POINTER(Viewport), ),
+    (b'vkCmdSetScissor', None, CommandBuffer, c_uint, c_uint, POINTER(Rect2D), ),
+    (b'vkCmdSetLineWidth', None, CommandBuffer, c_float, ),
+    (b'vkCmdSetDepthBias', None, CommandBuffer, c_float, c_float, c_float, ),
+    (b'vkCmdSetBlendConstants', None, CommandBuffer, c_float, ),
+    (b'vkCmdSetDepthBounds', None, CommandBuffer, c_float, c_float, ),
+    (b'vkCmdSetStencilCompareMask', None, CommandBuffer, StencilFaceFlags, c_uint, ),
+    (b'vkCmdSetStencilWriteMask', None, CommandBuffer, StencilFaceFlags, c_uint, ),
+    (b'vkCmdSetStencilReference', None, CommandBuffer, StencilFaceFlags, c_uint, ),
+    (b'vkCmdBindDescriptorSets', None, CommandBuffer, PipelineBindPoint, PipelineLayout, c_uint, c_uint, POINTER(DescriptorSet), c_uint, POINTER(c_uint), ),
+    (b'vkCmdBindIndexBuffer', None, CommandBuffer, Buffer, DeviceSize, IndexType, ),
+    (b'vkCmdBindVertexBuffers', None, CommandBuffer, c_uint, c_uint, POINTER(Buffer), POINTER(DeviceSize), ),
+    (b'vkCmdDraw', None, CommandBuffer, c_uint, c_uint, c_uint, c_uint, ),
+    (b'vkCmdDrawIndexed', None, CommandBuffer, c_uint, c_uint, c_uint, c_int, c_uint, ),
+    (b'vkCmdDrawIndirect', None, CommandBuffer, Buffer, DeviceSize, c_uint, c_uint, ),
+    (b'vkCmdDrawIndexedIndirect', None, CommandBuffer, Buffer, DeviceSize, c_uint, c_uint, ),
+    (b'vkCmdDispatch', None, CommandBuffer, c_uint, c_uint, c_uint, ),
+    (b'vkCmdDispatchIndirect', None, CommandBuffer, Buffer, DeviceSize, ),
+    (b'vkCmdCopyBuffer', None, CommandBuffer, Buffer, Buffer, c_uint, POINTER(BufferCopy), ),
+    (b'vkCmdCopyImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageCopy), ),
+    (b'vkCmdBlitImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageBlit), Filter, ),
+    (b'vkCmdCopyBufferToImage', None, CommandBuffer, Buffer, Image, ImageLayout, c_uint, POINTER(BufferImageCopy), ),
+    (b'vkCmdCopyImageToBuffer', None, CommandBuffer, Image, ImageLayout, Buffer, c_uint, POINTER(BufferImageCopy), ),
+    (b'vkCmdUpdateBuffer', None, CommandBuffer, Buffer, DeviceSize, DeviceSize, c_void_p, ),
+    (b'vkCmdFillBuffer', None, CommandBuffer, Buffer, DeviceSize, DeviceSize, c_uint, ),
+    (b'vkCmdClearColorImage', None, CommandBuffer, Image, ImageLayout, POINTER(ClearColorValue), c_uint, POINTER(ImageSubresourceRange), ),
+    (b'vkCmdClearDepthStencilImage', None, CommandBuffer, Image, ImageLayout, POINTER(ClearDepthStencilValue), c_uint, POINTER(ImageSubresourceRange), ),
+    (b'vkCmdClearAttachments', None, CommandBuffer, c_uint, POINTER(ClearAttachment), c_uint, POINTER(ClearRect), ),
+    (b'vkCmdResolveImage', None, CommandBuffer, Image, ImageLayout, Image, ImageLayout, c_uint, POINTER(ImageResolve), ),
+    (b'vkCmdSetEvent', None, CommandBuffer, Event, PipelineStageFlags, ),
+    (b'vkCmdResetEvent', None, CommandBuffer, Event, PipelineStageFlags, ),
+    (b'vkCmdWaitEvents', None, CommandBuffer, c_uint, POINTER(Event), PipelineStageFlags, PipelineStageFlags, c_uint, POINTER(MemoryBarrier), c_uint, POINTER(BufferMemoryBarrier), c_uint, POINTER(ImageMemoryBarrier), ),
+    (b'vkCmdPipelineBarrier', None, CommandBuffer, PipelineStageFlags, PipelineStageFlags, DependencyFlags, c_uint, POINTER(MemoryBarrier), c_uint, POINTER(BufferMemoryBarrier), c_uint, POINTER(ImageMemoryBarrier), ),
+    (b'vkCmdBeginQuery', None, CommandBuffer, QueryPool, c_uint, QueryControlFlags, ),
+    (b'vkCmdEndQuery', None, CommandBuffer, QueryPool, c_uint, ),
+    (b'vkCmdResetQueryPool', None, CommandBuffer, QueryPool, c_uint, c_uint, ),
+    (b'vkCmdWriteTimestamp', None, CommandBuffer, PipelineStageFlagBits, QueryPool, c_uint, ),
+    (b'vkCmdCopyQueryPoolResults', None, CommandBuffer, QueryPool, c_uint, c_uint, Buffer, DeviceSize, DeviceSize, QueryResultFlags, ),
+    (b'vkCmdPushConstants', None, CommandBuffer, PipelineLayout, ShaderStageFlags, c_uint, c_uint, c_void_p, ),
+    (b'vkCmdBeginRenderPass', None, CommandBuffer, POINTER(RenderPassBeginInfo), SubpassContents, ),
+    (b'vkCmdNextSubpass', None, CommandBuffer, SubpassContents, ),
+    (b'vkCmdEndRenderPass', None, CommandBuffer, ),
+    (b'vkCmdExecuteCommands', None, CommandBuffer, c_uint, POINTER(CommandBuffer), ),
+    (b'vkCmdDebugMarkerBeginEXT', None, CommandBuffer, POINTER(DebugMarkerMarkerInfoEXT), ),
+    (b'vkCmdDebugMarkerEndEXT', None, CommandBuffer, ),
+    (b'vkCmdDebugMarkerInsertEXT', None, CommandBuffer, POINTER(DebugMarkerMarkerInfoEXT), ),
+)
+
+InstanceFunctions = (
+    (b'vkDestroyInstance', None, Instance, POINTER(AllocationCallbacks), ),
+    (b'vkEnumeratePhysicalDevices', Result, Instance, POINTER(c_uint), POINTER(PhysicalDevice), ),
+    (b'vkGetDeviceProcAddr', fn_VoidFunction, Device, c_char_p, ),
+    (b'vkCreateAndroidSurfaceKHR', Result, Instance, POINTER(AndroidSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateDisplayPlaneSurfaceKHR', Result, Instance, POINTER(DisplaySurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateMirSurfaceKHR', Result, Instance, POINTER(MirSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkDestroySurfaceKHR', None, Instance, SurfaceKHR, POINTER(AllocationCallbacks), ),
+    (b'vkCreateWaylandSurfaceKHR', Result, Instance, POINTER(WaylandSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateWin32SurfaceKHR', Result, Instance, POINTER(Win32SurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateXlibSurfaceKHR', Result, Instance, POINTER(XlibSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateXcbSurfaceKHR', Result, Instance, POINTER(XcbSurfaceCreateInfoKHR), POINTER(AllocationCallbacks), POINTER(SurfaceKHR), ),
+    (b'vkCreateDebugReportCallbackEXT', Result, Instance, POINTER(DebugReportCallbackCreateInfoEXT), POINTER(AllocationCallbacks), POINTER(DebugReportCallbackEXT), ),
+    (b'vkDestroyDebugReportCallbackEXT', None, Instance, DebugReportCallbackEXT, POINTER(AllocationCallbacks), ),
+    (b'vkDebugReportMessageEXT', None, Instance, DebugReportFlagsEXT, DebugReportObjectTypeEXT, c_uint64, c_size_t, c_int, c_char_p, c_char_p, ),
+)
+
 GetInstanceProcAddr = vk.vkGetInstanceProcAddr
-GetInstanceProcAddr.restype = VoidFunction
+GetInstanceProcAddr.restype = fn_VoidFunction
 GetInstanceProcAddr.argtypes = (Instance, c_char_p, )
 
 # EXTENSIONS 
